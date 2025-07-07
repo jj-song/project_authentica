@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any, Union, List, Tuple
 import praw
 from praw.exceptions import PRAWException, APIException, ClientException
 
-from src.llm_handler import generate_comment
+from src.llm_handler import generate_comment, generate_comment_from_submission
 
 
 class KarmaAgent:
@@ -146,9 +146,10 @@ class KarmaAgent:
             )
             return
         
-        # Generate comment using LLM handler
+        # Generate comment using context-aware LLM handler
         try:
-            comment_text = generate_comment(submission.title, submission.selftext)
+            # Use the new context-aware comment generation
+            comment_text = generate_comment_from_submission(submission, self.reddit)
             
             # Post the comment
             self.logger.info(f"Attempting to comment on submission {submission.id}")
