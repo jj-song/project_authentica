@@ -10,8 +10,11 @@ from pathlib import Path
 from typing import Optional, Any
 
 
-# Database file path constant
-DB_FILE = "data/authentica.db"
+# Get the project root directory
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+# Database file path constant - use absolute path to avoid duplication
+DB_FILE = os.path.join(PROJECT_ROOT, "data", "authentica.db")
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -90,4 +93,4 @@ def initialize_database() -> None:
 if __name__ == "__main__":
     # Initialize the database when script is run directly
     initialize_database()
-    print(f"Database initialized successfully at {os.path.abspath(DB_FILE)}") 
+    print(f"Database initialized successfully at {DB_FILE}") 
