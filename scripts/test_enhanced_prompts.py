@@ -4,10 +4,14 @@ Test script for enhanced prompt engineering with dynamic templates and variation
 """
 
 import os
+import sys
 import logging
 from dotenv import load_dotenv
 import json
 import random
+
+# Add the project root directory to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.config import get_reddit_instance
 from src.llm_handler import generate_comment_from_submission
