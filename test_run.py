@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """
-Script to test the bot with OpenAI integration on the testingground4bots subreddit.
+Test script to run a single scan without the scheduler.
 """
 
-import os
 import logging
-from dotenv import load_dotenv
-from src.database import get_db_connection
+from src.database import get_db_connection, initialize_database
 from src.config import get_reddit_instance
 from src.agent import KarmaAgent
 
@@ -15,24 +13,16 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger("TestBotRun")
+logger = logging.getLogger("TestRun")
 
 # Bot configuration
 BOT_USERNAME = "my_first_bot"
 TARGET_SUBREDDIT = "testingground4bots"
-POST_LIMIT = 5  # Increased to 5 posts for testing
+POST_LIMIT = 5
 
 def main():
-    """Run a single scan of the testingground4bots subreddit."""
+    """Run a single scan without the scheduler."""
     try:
-        # Load environment variables
-        load_dotenv()
-        
-        # Check if API key is set
-        if not os.getenv("OPENAI_API_KEY"):
-            logger.error("OPENAI_API_KEY environment variable is not set.")
-            logger.error("The bot will use placeholder comments instead of AI-generated ones.")
-        
         # Initialize database connection
         logger.info("Getting database connection...")
         db_conn = get_db_connection()
@@ -46,9 +36,9 @@ def main():
         agent = KarmaAgent(reddit, db_conn)
         logger.info("KarmaAgent initialized")
         
-        # Run a single scan using 'new' instead of 'hot'
-        logger.info(f"Running a scan of r/{TARGET_SUBREDDIT} (new posts)...")
-        agent.scan_and_comment(TARGET_SUBREDDIT, POST_LIMIT, sort='new')
+        # Run a single scan
+        logger.info(f"Running a scan of r/{TARGET_SUBREDDIT}...")
+        agent.scan_and_comment(TARGET_SUBREDDIT, POST_LIMIT)
         logger.info(f"Scan completed for r/{TARGET_SUBREDDIT}")
         
     except Exception as e:
