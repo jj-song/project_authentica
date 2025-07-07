@@ -80,6 +80,10 @@ def main() -> NoReturn:
             name=f'Scan r/{target_subreddit}'
         )
         
+        # Run an immediate scan for testing
+        logger.info(f"Running an immediate scan of r/{target_subreddit} for testing...")
+        agent.scan_and_comment(target_subreddit, 5)  # Scan 5 posts
+        
         # Start the scheduler
         scheduler.start()
         logger.info(f"Scheduler started. Will scan r/{target_subreddit} every ~30 minutes")
