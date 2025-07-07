@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""
+Agent module for Project Authentica.
+Defines the KarmaAgent class that manages Reddit interactions.
+"""
+
+import logging
+import sqlite3
+import datetime
+from typing import Optional, Dict, Any, Union, List, Tuple
+
+import praw
+from praw.exceptions import PRAWException, APIException, ClientException
+
+from src.llm_handler import generate_comment
+
+
+class KarmaAgent:
+    """
+    KarmaAgent is responsible for scanning subreddits, identifying relevant posts,
+    and posting AI-generated comments to build karma.
+    
+    The agent interacts with Reddit via PRAW and logs all actions to a SQLite database.
+    """
+    
+    def __init__(self, reddit_instance: praw.Reddit, db_connection: sqlite3.Connection):
+        """
+        Initialize a new KarmaAgent.
+        
+        Args:
+            reddit_instance (praw.Reddit): An authenticated Reddit instance.
+            db_connection (sqlite3.Connection): An open connection to the SQLite database.
+        """
+        self.reddit = reddit_instance
+        self.db = db_connection
+        self.username = str(self.reddit.user.me())
+        
+        # Configure logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        self.logger = logging.getLogger(f"KarmaAgent-{self.username}")
+        
+        self.logger.info(f"KarmaAgent initialized for user: {self.username}")
+    
+    def scan_and_comment(self, subreddit_name: str, post_limit: int = 10) -> None:
+        """
+        Scan a subreddit for posts, identify relevant ones, and post AI-generated comments.
+        
+        This is the main workflow method that orchestrates the agent's activity:
+        1. Log the start of the scan action
+        2. Fetch hot submissions from the subreddit
+        3. For each submission, check if it's relevant and if we've already commented
+        4. Generate and post a comment on relevant submissions
+        5. Log the results of each action
+        
+        Args:
+            subreddit_name (str): Name of the subreddit to scan (without the 'r/' prefix)
+            post_limit (int, optional): Maximum number of posts to scan. Defaults to 10.
+        """
+        # Log the start of the scan action
+        self._log_action(
+            action_type="SCAN_START",
+            target_id=subreddit_name,
+            status="INFO",
+            details=f"Starting scan of r/{subreddit_name} with limit {post_limit}"
+        )
+        
+        try:
+            # Get the subreddit
+            subreddit = self.reddit.subreddit(subreddit_name)
+            
+            # Fetch hot submissions
+            hot_submissions = list(subreddit.hot(limit=post_limit))
+            self.logger.info(f"Fetched {len(hot_submissions)} hot submissions from r/{subreddit_name}")
+            
+            # Log the completion of the fetch
+            self._log_action(
+                action_type="FETCH_POSTS",
+                target_id=subreddit_name,
+                status="SUCCESS",
+                details=f"Fetched {len(hot_submissions)} posts"
+            )
+            
+            # Process each submission
+            for submission in hot_submissions:
+                self._process_submission(submission, subreddit_name)
+                
+        except PRAWException as e:
+            self.logger.error(f"PRAW error during scan of r/{subreddit_name}: {str(e)}")
+            self._log_action(
+                action_type="SCAN_ERROR",
+                target_id=subreddit_name,
+                status="FAILURE",
+                details=f"PRAW error: {str(e)}"
+            )
+        except Exception as e:
+            self.logger.error(f"Unexpected error during scan of r/{subreddit_name}: {str(e)}")
+            self._log_action(
+                action_type="SCAN_ERROR",
+                target_id=subreddit_name,
+                status="FAILURE",
+                details=f"Unexpected error: {str(e)}"
+            )
+    
+    def _process_submission(self, submission: praw.models.Submission, subreddit_name: str) -> None:
+        """
+        Process a single submission: check if relevant, generate and post a comment if appropriate.
+        
+        Args:
+            submission (praw.models.Submission): The Reddit submission to process
+            subreddit_name (str): Name of the subreddit (for logging purposes)
+        """
+        # Check if we've already commented on this submission
+        cursor = self.db.cursor()
+        cursor.execute(
+            "SELECT * FROM actions_log WHERE bot_username = ? AND action_type = ? AND target_id = ? AND status = ?",
+            (self.username, "COMMENT", submission.id, "SUCCESS")
+        )
+        if cursor.fetchone():
+            self.logger.info(f"Already commented on submission {submission.id}, skipping")
+            return
+        
+        # Check if the post is relevant
+        if not self._is_post_relevant(submission):
+            self.logger.info(f"Submission {submission.id} deemed not relevant, skipping")
+            self._log_action(
+                action_type="SKIP_POST",
+                target_id=submission.id,
+                status="INFO",
+                details="Post deemed not relevant"
+            )
+            return
+        
+        # Generate comment using LLM handler
+        try:
+            comment_text = generate_comment(submission.title, submission.selftext)
+            
+            # Post the comment
+            self.logger.info(f"Attempting to comment on submission {submission.id}")
+            comment = submission.reply(comment_text)
+            
+            # Log the successful comment
+            self.logger.info(f"Successfully commented on submission {submission.id}, comment ID: {comment.id}")
+            self._log_action(
+                action_type="COMMENT",
+                target_id=submission.id,
+                status="SUCCESS",
+                details=f"Comment posted with ID {comment.id}"
+            )
+            
+            # Create a record in comment_performance table
+            current_time = datetime.datetime.now().isoformat()
+            cursor.execute(
+                """
+                INSERT INTO comment_performance 
+                (comment_id, submission_id, subreddit, initial_score, current_score, last_checked) 
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (comment.id, submission.id, subreddit_name, 1, 1, current_time)
+            )
+            self.db.commit()
+            
+        except (PRAWException, APIException, ClientException) as e:
+            self.logger.error(f"Error posting comment to {submission.id}: {str(e)}")
+            self._log_action(
+                action_type="COMMENT",
+                target_id=submission.id,
+                status="FAILURE",
+                details=f"PRAW error: {str(e)}"
+            )
+        except Exception as e:
+            self.logger.error(f"Unexpected error posting comment to {submission.id}: {str(e)}")
+            self._log_action(
+                action_type="COMMENT",
+                target_id=submission.id,
+                status="FAILURE",
+                details=f"Unexpected error: {str(e)}"
+            )
+    
+    def _is_post_relevant(self, submission: praw.models.Submission) -> bool:
+        """
+        Determine if a post is relevant for commenting.
+        
+        In the MVP, this always returns True. In future versions, this will implement
+        logic to determine if a post is suitable for an AI-generated comment.
+        
+        Args:
+            submission (praw.models.Submission): The Reddit submission to evaluate
+            
+        Returns:
+            bool: True if the post is relevant, False otherwise
+        """
+        # TODO: Implement actual relevance checking logic
+        # For MVP, all posts are considered relevant
+        return True
+    
+    def _log_action(self, action_type: str, target_id: str, status: str, details: Optional[str] = None) -> None:
+        """
+        Log an action to the actions_log table in the database.
+        
+        Args:
+            action_type (str): Type of action (e.g., "SCAN_START", "COMMENT", "SKIP_POST")
+            target_id (str): ID of the target (submission ID, subreddit name, etc.)
+            status (str): Status of the action (e.g., "SUCCESS", "FAILURE", "INFO")
+            details (Optional[str], optional): Additional details about the action. Defaults to None.
+        """
+        try:
+            timestamp = datetime.datetime.now().isoformat()
+            cursor = self.db.cursor()
+            cursor.execute(
+                """
+                INSERT INTO actions_log 
+                (bot_username, action_type, target_id, status, details, timestamp) 
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (self.username, action_type, target_id, status, details, timestamp)
+            )
+            self.db.commit()
+        except sqlite3.Error as e:
+            self.logger.error(f"Database error when logging action: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error when logging action: {str(e)}")
+
+
+if __name__ == "__main__":
+    # Example usage (for demonstration purposes only)
+    import sys
+    from src.database import get_db_connection
+    from src.config import get_reddit_instance
+    
+    if len(sys.argv) > 2:
+        bot_username = sys.argv[1]
+        subreddit_name = sys.argv[2]
+        post_limit = int(sys.argv[3]) if len(sys.argv) > 3 else 5
+        
+        try:
+            # Get Reddit instance and DB connection
+            reddit = get_reddit_instance(bot_username)
+            db_conn = get_db_connection()
+            
+            # Create and run agent
+            agent = KarmaAgent(reddit, db_conn)
+            agent.scan_and_comment(subreddit_name, post_limit)
+            
+            print(f"Agent completed scan of r/{subreddit_name}")
+            
+            # Close DB connection
+            db_conn.close()
+        except Exception as e:
+            print(f"Error: {e}")
+    else:
+        print("Usage: python agent.py <bot_username> <subreddit_name> [post_limit]") 
