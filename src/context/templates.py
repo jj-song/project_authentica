@@ -445,6 +445,67 @@ Just write the comment text directly, without any additional formatting or expla
         return prompt
 
 
+class CommentReplyTemplate(PromptTemplate):
+    """
+    Template for generating replies to comments.
+    
+    This template is specifically designed for replying to existing comments
+    rather than directly to the submission.
+    """
+    
+    def generate(self, context: Dict[str, Any]) -> str:
+        """
+        Generate a prompt for replying to a comment.
+        
+        Args:
+            context (Dict[str, Any]): Context information including the comment to reply to.
+            
+        Returns:
+            str: The generated prompt.
+        """
+        submission = context["submission"]
+        subreddit = context["subreddit"]
+        comment_to_reply = context.get("comment_to_reply", {})
+        
+        if not comment_to_reply:
+            # Fallback to standard template if no comment to reply to
+            return StandardPromptTemplate().generate(context)
+        
+        # Extract comment information
+        comment_author = comment_to_reply.get("author", "[deleted]")
+        comment_body = comment_to_reply.get("body", "")
+        
+        # Generate the prompt
+        prompt = f"""
+You are replying to a comment on a Reddit post in r/{subreddit["name"]}.
+
+The original post is:
+Title: {submission["title"]}
+Content: {submission["body"]}
+
+You are specifically replying to this comment by u/{comment_author}:
+"{comment_body}"
+
+Write a natural, conversational reply that:
+1. Directly addresses the specific points or questions in the comment
+2. Maintains a friendly, helpful tone
+3. Feels like a genuine human interaction
+4. Adds value to the conversation
+5. Fits the tone and style of r/{subreddit["name"]}
+
+Your reply should NOT:
+- Start with phrases like "As an AI" or "Here's my response"
+- Sound too perfect or polished
+- Use bullet points or numbered lists unless absolutely necessary
+- Exceed 800 characters
+- Repeat the same points already made in the comment
+
+Just write the reply text directly, without any additional formatting or explanation.
+"""
+        
+        return prompt
+
+
 class VariationEngine:
     """
     Adds variations to prompts to create more diverse responses.
@@ -469,12 +530,26 @@ class VariationEngine:
     ]
     
     LANGUAGE_VARIATIONS = [
-        "Use more contractions than you normally would (e.g., 'I'd' instead of 'I would').",
-        "Include 1-2 casual expressions or slang terms that fit the context.",
-        "Use slightly more informal punctuation, like occasional '...' or '!'",
-        "Vary your sentence length more than usual - mix short and long sentences.",
-        "Use a few sentence fragments for emphasis. Just occasionally.",
+        "Use a few contractions (e.g., don't, can't, I'm).",
+        "Include a casual expression or two.",
+        "Use a slightly more informal vocabulary.",
+        "Include a brief aside in parentheses.",
+        "Start a sentence with a conjunction occasionally (And, But, So).",
     ]
+    
+    @classmethod
+    def get_random_variations(cls, count: int = 2) -> List[str]:
+        """
+        Get a list of random variations.
+        
+        Args:
+            count (int): Number of variations to get.
+            
+        Returns:
+            List[str]: List of variation instructions.
+        """
+        all_variations = cls.TONE_VARIATIONS + cls.STYLE_VARIATIONS + cls.LANGUAGE_VARIATIONS
+        return random.sample(all_variations, min(count, len(all_variations)))
     
     @classmethod
     def apply_variations(cls, prompt: str, variation_count: int = 2) -> str:
@@ -482,98 +557,109 @@ class VariationEngine:
         Apply random variations to a prompt.
         
         Args:
-            prompt (str): The original prompt.
+            prompt (str): The base prompt.
             variation_count (int): Number of variations to apply.
             
         Returns:
             str: The prompt with variations applied.
         """
-        variations = []
-        
-        # Select random variations
-        variations.extend(random.sample(cls.TONE_VARIATIONS, min(1, variation_count)))
-        variations.extend(random.sample(cls.STYLE_VARIATIONS, min(1, variation_count)))
-        
-        if variation_count > 2:
-            variations.extend(random.sample(cls.LANGUAGE_VARIATIONS, min(1, variation_count - 2)))
-        
-        # Shuffle the variations
-        random.shuffle(variations)
+        # Get random variations
+        variations = cls.get_random_variations(variation_count)
         
         # Add variations to the prompt
-        variation_text = "\n\nAdd these variations to your response:\n"
-        for i, variation in enumerate(variations, 1):
-            variation_text += f"{i}. {variation}\n"
+        variation_text = "\n\n".join(variations)
         
-        return prompt + variation_text
+        if variation_text:
+            prompt += f"\n\nAdditional style guidance:\n{variation_text}"
+        
+        return prompt
 
 
 class TemplateSelector:
     """
-    Selects an appropriate template based on context.
+    Selects the most appropriate template based on context.
     """
     
     def __init__(self):
-        """Initialize the template selector with available templates."""
+        """
+        Initialize the template selector with all available templates.
+        """
         self.templates = {
             "standard": StandardPromptTemplate(),
             "subreddit_specific": SubredditSpecificTemplate(),
             "persona_based": PersonaBasedTemplate(),
             "content_type": ContentTypeTemplate(),
+            "comment_reply": CommentReplyTemplate(),
         }
-    
-    def select_template(self, context: Dict[str, Any]) -> PromptTemplate:
+        
+    def select_template(self, context: Dict[str, Any], comment_to_reply=None) -> PromptTemplate:
         """
-        Select an appropriate template based on context.
+        Select the most appropriate template based on context.
         
         Args:
             context (Dict[str, Any]): Context information.
+            comment_to_reply: If provided, select the comment reply template.
             
         Returns:
             PromptTemplate: The selected template.
         """
+        # If we're replying to a comment, use the comment reply template
+        if comment_to_reply is not None:
+            logger.info("Selected comment_reply template")
+            return self.templates["comment_reply"]
+            
+        # Check if we have subreddit-specific information
         subreddit_name = context["subreddit"]["name"].lower()
-        submission = context["submission"]
-        
-        # Use content type template for questions and advice requests
-        content_template = self.templates["content_type"]
-        if content_template.is_question(submission) or content_template.is_advice_request(submission):
-            logger.info(f"Selected content_type template for submission {submission['id']}")
-            return content_template
-        
-        # Use subreddit-specific template if available
         if subreddit_name in SubredditSpecificTemplate.SUBREDDIT_STYLES:
             logger.info(f"Selected subreddit_specific template for r/{subreddit_name}")
             return self.templates["subreddit_specific"]
         
-        # Randomly select between persona-based and standard templates
-        if random.random() < 0.7:  # 70% chance for persona-based
-            logger.info(f"Selected persona_based template (random)")
-            return self.templates["persona_based"]
+        # Check if we can identify the content type
+        submission = context["submission"]
+        if ContentTypeTemplate.is_question(submission):
+            logger.info("Selected content_type template for question")
+            return self.templates["content_type"]
+        elif ContentTypeTemplate.is_advice_request(submission):
+            logger.info("Selected content_type template for advice request")
+            return self.templates["content_type"]
         
-        # Default to standard template
-        logger.info(f"Selected standard template (default)")
-        return self.templates["standard"]
+        # Randomly select between standard and persona-based templates
+        if random.random() < 0.7:  # 70% chance for persona-based
+            logger.info("Selected persona_based template")
+            return self.templates["persona_based"]
+        else:
+            logger.info("Selected standard template")
+            return self.templates["standard"]
     
-    def generate_with_variations(self, context: Dict[str, Any], variation_count: int = 2) -> str:
+    def generate_with_variations(self, context: Dict[str, Any], variation_count: int = 2, comment_to_reply=None) -> str:
         """
-        Generate a prompt with variations.
+        Generate a prompt with variations using the selected template.
         
         Args:
             context (Dict[str, Any]): Context information.
             variation_count (int): Number of variations to apply.
+            comment_to_reply: If provided, generate a reply to this comment.
             
         Returns:
             str: The generated prompt with variations.
         """
-        # Select template
-        template = self.select_template(context)
+        # Select the appropriate template
+        template = self.select_template(context, comment_to_reply)
         
-        # Generate base prompt
-        prompt = template.generate(context)
+        # Generate the base prompt
+        if comment_to_reply is not None:
+            # Add the comment to reply to in the context
+            context["comment_to_reply"] = {
+                "id": comment_to_reply.id,
+                "body": comment_to_reply.body,
+                "author": str(comment_to_reply.author) if comment_to_reply.author else "[deleted]",
+                "score": comment_to_reply.score,
+            }
+            
+        base_prompt = template.generate(context)
         
         # Apply variations
-        return VariationEngine.apply_variations(prompt, variation_count)
+        return VariationEngine.apply_variations(base_prompt, variation_count)
 
 
 if __name__ == "__main__":
