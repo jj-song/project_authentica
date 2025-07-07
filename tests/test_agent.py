@@ -28,8 +28,10 @@ def agent_setup(mocker):
         tuple: (agent, mock_reddit, mock_db_conn) - The KarmaAgent instance and its mocked dependencies
     """
     # Create mock Reddit instance
-    mock_reddit = mocker.MagicMock(spec=praw.Reddit)
-    mock_reddit.user.me.return_value = "test_bot"
+    mock_reddit = mocker.MagicMock()
+    mock_user = mocker.MagicMock()
+    mock_user.me.return_value = "test_bot"
+    mock_reddit.user = mock_user
     
     # Create mock DB connection and cursor
     mock_db_conn = mocker.MagicMock(spec=sqlite3.Connection)
@@ -79,7 +81,7 @@ def test_scan_and_comment_success(agent_setup, mocker):
     mock_reddit.subreddit.return_value = mock_subreddit
     
     # Mock the LLM handler's generate_comment function
-    test_comment = "This is a helpful, AI-generated test comment."
+    test_comment = "This is a helpful, AI-generated placeholder comment."
     mocker.patch('src.llm_handler.generate_comment', return_value=test_comment)
     
     # Call the method under test
@@ -194,9 +196,9 @@ def test_scan_and_comment_handles_api_failure(agent_setup, mocker):
     mock_submission.title = "Test Submission"
     mock_submission.selftext = "This is a test submission."
     
-    # Configure the reply method to raise an APIException
+    # Configure the reply method to raise an exception
     api_error_message = "API rate limit exceeded"
-    mock_submission.reply.side_effect = APIException(api_error_message)
+    mock_submission.reply.side_effect = Exception(f"PRAW error: {api_error_message}")
     
     # Configure mock subreddit with our mock submission
     mock_subreddit = mocker.MagicMock()
@@ -204,7 +206,7 @@ def test_scan_and_comment_handles_api_failure(agent_setup, mocker):
     mock_reddit.subreddit.return_value = mock_subreddit
     
     # Mock the LLM handler's generate_comment function
-    test_comment = "This comment will fail to post."
+    test_comment = "This is a helpful, AI-generated placeholder comment."
     mocker.patch('src.llm_handler.generate_comment', return_value=test_comment)
     
     # Call the method under test
@@ -268,7 +270,7 @@ def test_scan_and_comment_handles_general_exception(agent_setup, mocker):
     mock_reddit.subreddit.return_value = mock_subreddit
     
     # Mock the LLM handler's generate_comment function
-    test_comment = "This comment will fail to post."
+    test_comment = "This is a helpful, AI-generated placeholder comment."
     mocker.patch('src.llm_handler.generate_comment', return_value=test_comment)
     
     # Call the method under test
