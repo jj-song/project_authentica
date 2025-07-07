@@ -5,7 +5,7 @@ Contains helper functions used across the project.
 """
 
 import logging
-from typing import Optional, Dict, Any, Union, List, Tuple, Set, Callable, bool
+from typing import Optional, Dict, Any, Union, List, Tuple, Set, Callable
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError
 
