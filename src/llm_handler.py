@@ -41,13 +41,14 @@ LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", DEFAULT_TEMPERATURE))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS))
 
 
-def create_prompt(submission: Submission, reddit_instance: praw.Reddit) -> str:
+def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2) -> str:
     """
     Format the submission into an effective prompt for the LLM using context-aware prompt engineering.
     
     Args:
         submission (Submission): The Reddit submission
         reddit_instance (praw.Reddit): Authenticated Reddit instance for context collection
+        variation_count (int): Number of variations to apply to the prompt
         
     Returns:
         str: A formatted prompt for the LLM
@@ -57,12 +58,9 @@ def create_prompt(submission: Submission, reddit_instance: praw.Reddit) -> str:
         collector = ContextCollector(reddit_instance)
         context = collector.collect_context(submission)
         
-        # Select template
+        # Select template and generate prompt with variations
         selector = TemplateSelector()
-        template = selector.select_template(context)
-        
-        # Generate prompt
-        return template.generate(context)
+        return selector.generate_with_variations(context, variation_count)
     except Exception as e:
         logger.error(f"Error creating context-aware prompt: {str(e)}")
         # Fall back to basic prompt if context collection fails
@@ -160,7 +158,7 @@ def clean_response(text: str) -> str:
     return text
 
 
-def generate_comment_from_submission(submission: Submission, reddit_instance: praw.Reddit) -> str:
+def generate_comment_from_submission(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2) -> str:
     """
     Generate a comment for a Reddit submission using an external LLM with context-aware prompting.
     
@@ -170,6 +168,7 @@ def generate_comment_from_submission(submission: Submission, reddit_instance: pr
     Args:
         submission (Submission): The Reddit submission.
         reddit_instance (praw.Reddit): Authenticated Reddit instance for context collection.
+        variation_count (int): Number of variations to apply to the prompt.
         
     Returns:
         str: A generated comment that is relevant to the submission.
@@ -178,8 +177,12 @@ def generate_comment_from_submission(submission: Submission, reddit_instance: pr
         If the API call fails, this will return a hardcoded placeholder string.
     """
     try:
-        # Create the context-aware prompt
-        prompt = create_prompt(submission, reddit_instance)
+        # Create the context-aware prompt with variations
+        prompt = create_prompt(submission, reddit_instance, variation_count)
+        
+        # Log the prompt for debugging (but not in production)
+        if os.getenv("DEBUG_MODE", "").lower() == "true":
+            logger.debug(f"Generated prompt:\n{prompt}")
         
         # Call the API
         generated_text = call_openai_api(prompt)
