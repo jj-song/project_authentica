@@ -1,6 +1,6 @@
-# Project Authentica: AI-Assisted MVP Build Plan
+# Project Authentica: AI-Assisted Reddit Bot
 
-This document serves as the official `README.md` and step-by-step construction guide for the Project Authentica MVP. It is the primary context-setting document for the AI assistant. Use this file to track the project's progress from start to finish.
+This document serves as the official `README.md` for the Project Authentica. Project Authentica is a Reddit bot system that posts AI-generated comments using OpenAI's API.
 
 ---
 
@@ -24,63 +24,6 @@ This document serves as the official `README.md` and step-by-step construction g
     * Implement specific and robust `try...except` blocks for all operations that can fail, especially network I/O (API calls), file operations, and database interactions. Avoid generic `except Exception:`.
 
 ---
-
-## ✅ Project Tracker Checklist
-
-Use this checklist to track your progress as you complete each step.
-
-### **Phase 1: Setup & Environment**
-- [ ] **Task 1:** Create project directory `project_authentica`.
-- [ ] **Task 2:** Generate `requirements.txt` (including `pytest`) and `.gitignore`.
-- [ ] **Task 3:** Install dependencies: `pip install -r requirements.txt`.
-- [ ] **Task 4:** Create the `praw.ini` configuration file.
-
-### **Phase 2: Core Module Generation**
-- [ ] **Task 5:** Generate `src/database.py`.
-- [ ] **Task 6:** Generate `src/config.py`.
-- [ ] **Task 7:** Generate `src/utils.py`.
-- [ ] **Task 8:** Generate `src/llm_handler.py`.
-- [ ] **Task 9:** Generate `src/agent.py` with the `KarmaAgent` class.
-- [ ] **Task 10:** Generate `src/main.py` to initialize and schedule the agent.
-
-### **Phase 3: Unit Testing**
-- [ ] **Task 11:** Create the `tests/` directory structure.
-- [ ] **Task 12:** Write unit tests for `src/utils.py` in `tests/test_utils.py`.
-- [ ] **Task 13:** Write unit tests for `src/database.py` logic in `tests/test_database.py`.
-- [ ] **Task 14:** Write unit tests for `src/agent.py` in `tests/test_agent.py`, using mocks for PRAW and the database.
-
-### **Phase 4: Integration & Deployment**
-- [ ] **Task 15:** Run all tests and ensure they pass: `pytest`.
-- [ ] **Task 16:** Initialize the database: `python src/database.py`.
-- [ ] **Task 17:** Manually add the first bot's data to the `bots` table.
-- [ ] **Task 18:** Run the application in a controlled test environment.
-- [ ] **Task 19:** Monitor `data/authentica.db` and console output.
-- [ ] **Task 20:** Deploy for the 30-day viability test.
-
----
-
-## 🚀 Construction Plan: Task Overview
-
-This section outlines the goals for each step of the construction process.
-
-### **Task 1: Initial Project Setup**
-**Goal:** Create the foundational files for dependencies (`requirements.txt`) and version control (`.gitignore`).
-
-### **Task 2: Core Module Generation**
-**Goal:** Generate all the source code modules (`database.py`, `config.py`, `utils.py`, `llm_handler.py`, `agent.py`, `main.py`) according to the project blueprint.
-
-### **Task 3: Unit Testing**
-**Goal:** Create a corresponding test file for each core module, ensuring that all business logic is covered by unit tests that follow the "Standing Orders."
-
-### **Task 4: Final Configuration**
-**Goal:** Create the `praw.ini` configuration file in the project's root directory with the bot's API credentials.
-
-### **Task 5: Execution & Deployment**
-**Goal:** Run the test suite, initialize the database, and start the application for its operational trial.
-**Manual Follow-up:**
-1.  Run the test suite: `pytest`
-2.  Initialize the database: `python src/database.py`
-3.  Start the bot: `python src/main.py`
 
 ## Setup Instructions
 
@@ -109,7 +52,25 @@ username=YOUR_BOTS_REDDIT_USERNAME
 password=YOUR_BOTS_REDDIT_PASSWORD
 ```
 
-### 3. Run the Bot
+### 3. Configure OpenAI API
+
+1. Copy `env.example` to `.env`
+2. Add your OpenAI API key to the `.env` file:
+
+```
+OPENAI_API_KEY=your_openai_api_key_here
+LLM_MODEL=gpt-3.5-turbo
+LLM_TEMPERATURE=0.7
+LLM_MAX_TOKENS=250
+```
+
+### 4. Initialize the Database
+
+```bash
+python src/database.py
+```
+
+### 5. Run the Bot
 
 ```bash
 python src/main.py
@@ -117,12 +78,29 @@ python src/main.py
 
 ## Project Structure
 
-- `src/main.py`: Main entry point for the application
-- `src/agent.py`: Contains the KarmaAgent class for Reddit interactions
-- `src/config.py`: Handles Reddit API authentication
-- `src/database.py`: Manages database connections and schema
-- `src/llm_handler.py`: Handles interactions with language models
-- `src/utils.py`: Utility functions for the project
+- `src/`: Source code for the application
+  - `main.py`: Main entry point for the application
+  - `agent.py`: Contains the KarmaAgent class for Reddit interactions
+  - `config.py`: Handles Reddit API authentication
+  - `database.py`: Manages database connections and schema
+  - `llm_handler.py`: Handles interactions with language models
+  - `utils.py`: Utility functions for the project
+
+- `tests/`: Unit tests for the application
+  - `test_agent.py`: Tests for the KarmaAgent class
+  - `test_utils.py`: Tests for utility functions
+  - `test_llm_handler.py`: Tests for the LLM handler
+
+- `scripts/`: Utility scripts for testing and running the bot
+  - `test_bot_run.py`: Test the bot on r/testingground4bots
+  - `test_run.py`: Run the bot without the scheduler
+  - `test_openai.py`: Test the OpenAI integration
+  - `check_comment.py`: Check comments made by the bot
+
+- `docs/`: Documentation files
+  - `scope.md`: Comprehensive project scope and roadmap
+
+- `data/`: Database and data files (not tracked in git)
 
 ## Database Schema
 
@@ -135,4 +113,9 @@ The project uses SQLite with the following tables:
 ## Security Notes
 
 - The `praw.ini` file contains sensitive information and is excluded from version control
+- The `.env` file contains OpenAI API keys and is excluded from version control
 - All data is stored locally in the `data/` directory, which is also excluded from version control
+
+## Development Roadmap
+
+For a detailed roadmap of planned features and improvements, see [docs/scope.md](docs/scope.md).

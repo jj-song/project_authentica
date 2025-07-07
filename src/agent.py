@@ -44,13 +44,13 @@ class KarmaAgent:
         
         self.logger.info(f"KarmaAgent initialized for user: {self.username}")
     
-    def scan_and_comment(self, subreddit_name: str, post_limit: int = 10) -> None:
+    def scan_and_comment(self, subreddit_name: str, post_limit: int = 10, sort: str = 'hot') -> None:
         """
         Scan a subreddit for posts, identify relevant ones, and post AI-generated comments.
         
         This is the main workflow method that orchestrates the agent's activity:
         1. Log the start of the scan action
-        2. Fetch hot submissions from the subreddit
+        2. Fetch submissions from the subreddit based on sort type
         3. For each submission, check if it's relevant and if we've already commented
         4. Generate and post a comment on relevant submissions
         5. Log the results of each action
@@ -58,33 +58,46 @@ class KarmaAgent:
         Args:
             subreddit_name (str): Name of the subreddit to scan (without the 'r/' prefix)
             post_limit (int, optional): Maximum number of posts to scan. Defaults to 10.
+            sort (str, optional): Sort method for posts ('hot', 'new', 'top', 'rising'). Defaults to 'hot'.
         """
         # Log the start of the scan action
         self._log_action(
             action_type="SCAN_START",
             target_id=subreddit_name,
             status="INFO",
-            details=f"Starting scan of r/{subreddit_name} with limit {post_limit}"
+            details=f"Starting scan of r/{subreddit_name} with limit {post_limit}, sort: {sort}"
         )
         
         try:
             # Get the subreddit
             subreddit = self.reddit.subreddit(subreddit_name)
             
-            # Fetch hot submissions
-            hot_submissions = list(subreddit.hot(limit=post_limit))
-            self.logger.info(f"Fetched {len(hot_submissions)} hot submissions from r/{subreddit_name}")
+            # Fetch submissions based on sort type
+            if sort == 'hot':
+                submissions = list(subreddit.hot(limit=post_limit))
+            elif sort == 'new':
+                submissions = list(subreddit.new(limit=post_limit))
+            elif sort == 'top':
+                submissions = list(subreddit.top(limit=post_limit))
+            elif sort == 'rising':
+                submissions = list(subreddit.rising(limit=post_limit))
+            else:
+                # Default to hot if an invalid sort is provided
+                submissions = list(subreddit.hot(limit=post_limit))
+                sort = 'hot'
+            
+            self.logger.info(f"Fetched {len(submissions)} {sort} submissions from r/{subreddit_name}")
             
             # Log the completion of the fetch
             self._log_action(
                 action_type="FETCH_POSTS",
                 target_id=subreddit_name,
                 status="SUCCESS",
-                details=f"Fetched {len(hot_submissions)} posts"
+                details=f"Fetched {len(submissions)} {sort} posts"
             )
             
             # Process each submission
-            for submission in hot_submissions:
+            for submission in submissions:
                 self._process_submission(submission, subreddit_name)
                 
         except PRAWException as e:
