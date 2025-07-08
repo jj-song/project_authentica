@@ -7,12 +7,14 @@ Defines the KarmaAgent class that manages Reddit interactions.
 import logging
 import sqlite3
 import datetime
+import random
 from typing import Optional, Dict, Any, Union, List, Tuple
 
 import praw
 from praw.exceptions import PRAWException, APIException, ClientException
+from praw.models import Submission, Comment
 
-from src.llm_handler import generate_comment
+from src.llm_handler import generate_comment, generate_comment_from_submission
 
 
 class KarmaAgent:
@@ -146,9 +148,17 @@ class KarmaAgent:
             )
             return
         
-        # Generate comment using LLM handler
+        # Try to reply to a comment instead of the submission
         try:
-            comment_text = generate_comment(submission.title, submission.selftext)
+            # First try to find a suitable comment to reply to
+            if self._try_reply_to_comment(submission, subreddit_name):
+                return
+            
+            # If no suitable comment found or if reply failed, fall back to replying to the submission
+            self.logger.info(f"No suitable comment found, replying to submission {submission.id}")
+            
+            # Use the new context-aware comment generation
+            comment_text = generate_comment_from_submission(submission, self.reddit)
             
             # Post the comment
             self.logger.info(f"Attempting to comment on submission {submission.id}")
@@ -192,12 +202,79 @@ class KarmaAgent:
                 details=f"Unexpected error: {str(e)}"
             )
     
+    def _try_reply_to_comment(self, submission: Submission, subreddit_name: str) -> bool:
+        """
+        Try to reply to an existing comment instead of the submission.
+        
+        Args:
+            submission (Submission): The Reddit submission
+            subreddit_name (str): Name of the subreddit (for logging purposes)
+            
+        Returns:
+            bool: True if successfully replied to a comment, False otherwise
+        """
+        try:
+            # Replace MoreComments objects to get a flattened comment tree
+            submission.comments.replace_more(limit=0)
+            
+            # Filter for comments that:
+            # 1. Have a positive score
+            # 2. Are not from the bot itself
+            # 3. Have some substance (not too short)
+            eligible_comments = [
+                comment for comment in submission.comments
+                if (comment.score > 0 and 
+                    str(comment.author) != self.username and
+                    len(comment.body) >= 20)
+            ]
+            
+            if not eligible_comments:
+                self.logger.info(f"No eligible comments found in submission {submission.id}")
+                return False
+            
+            # Sort by score and select a comment from the top 3 (if available)
+            eligible_comments.sort(key=lambda c: c.score, reverse=True)
+            top_comments = eligible_comments[:min(3, len(eligible_comments))]
+            selected_comment = random.choice(top_comments)
+            
+            # Generate a reply using context-aware LLM handler
+            comment_text = generate_comment_from_submission(submission, self.reddit, comment_to_reply=selected_comment)
+            
+            # Post the reply
+            self.logger.info(f"Attempting to reply to comment {selected_comment.id} in submission {submission.id}")
+            reply = selected_comment.reply(comment_text)
+            
+            # Log the successful reply
+            self.logger.info(f"Successfully replied to comment {selected_comment.id}, reply ID: {reply.id}")
+            self._log_action(
+                action_type="COMMENT_REPLY",
+                target_id=selected_comment.id,
+                status="SUCCESS",
+                details=f"Reply posted with ID {reply.id} on submission {submission.id}"
+            )
+            
+            # Create a record in comment_performance table
+            current_time = datetime.datetime.now().isoformat()
+            cursor = self.db.cursor()
+            cursor.execute(
+                """
+                INSERT INTO comment_performance 
+                (comment_id, submission_id, subreddit, initial_score, current_score, last_checked) 
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (reply.id, submission.id, subreddit_name, 1, 1, current_time)
+            )
+            self.db.commit()
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error trying to reply to a comment in submission {submission.id}: {str(e)}")
+            return False
+    
     def _is_post_relevant(self, submission: praw.models.Submission) -> bool:
         """
         Determine if a post is relevant for commenting.
-        
-        In the MVP, this always returns True. In future versions, this will implement
-        logic to determine if a post is suitable for an AI-generated comment.
         
         Args:
             submission (praw.models.Submission): The Reddit submission to evaluate
@@ -205,8 +282,29 @@ class KarmaAgent:
         Returns:
             bool: True if the post is relevant, False otherwise
         """
-        # TODO: Implement actual relevance checking logic
-        # For MVP, all posts are considered relevant
+        # Skip stickied posts (like daily threads)
+        if submission.stickied:
+            self.logger.info(f"Skipping stickied post {submission.id}: {submission.title}")
+            return False
+        
+        # Skip posts with "daily" or "thread" in the title (common for recurring threads)
+        title_lower = submission.title.lower()
+        if ("daily" in title_lower and "thread" in title_lower) or "daily help thread" in title_lower:
+            self.logger.info(f"Skipping daily thread post {submission.id}: {submission.title}")
+            return False
+        
+        # Skip posts with very low scores
+        if submission.score < 1:
+            self.logger.info(f"Skipping low-score post {submission.id}: score {submission.score}")
+            return False
+        
+        # Skip posts with no comments (prefer posts with some engagement)
+        if submission.num_comments == 0:
+            self.logger.info(f"Skipping post with no comments {submission.id}")
+            return False
+        
+        # TODO: Add more relevance criteria as needed
+        
         return True
     
     def _log_action(self, action_type: str, target_id: str, status: str, details: Optional[str] = None) -> None:

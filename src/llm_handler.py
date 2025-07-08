@@ -7,11 +7,17 @@ Manages all interactions with external Large Language Models.
 import os
 import time
 import logging
+import json
 from typing import Optional, Dict, Any, Union, List
 
 from dotenv import load_dotenv
 from openai import OpenAI
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+import praw
+from praw.models import Submission, Comment
+
+from src.context.collector import ContextCollector
+from src.context.templates import TemplateSelector
 
 # Load environment variables
 load_dotenv()
@@ -35,9 +41,36 @@ LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", DEFAULT_TEMPERATURE))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS))
 
 
-def create_prompt(title: str, body: str) -> str:
+def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2, comment_to_reply: Optional[Comment] = None) -> str:
     """
-    Format the submission into an effective prompt for the LLM.
+    Format the submission into an effective prompt for the LLM using context-aware prompt engineering.
+    
+    Args:
+        submission (Submission): The Reddit submission
+        reddit_instance (praw.Reddit): Authenticated Reddit instance for context collection
+        variation_count (int): Number of variations to apply to the prompt
+        comment_to_reply (Optional[Comment]): If provided, generate a reply to this comment instead of the submission.
+        
+    Returns:
+        str: A formatted prompt for the LLM
+    """
+    try:
+        # Collect context
+        collector = ContextCollector(reddit_instance)
+        context = collector.collect_context(submission)
+        
+        # Select template and generate prompt with variations
+        selector = TemplateSelector()
+        return selector.generate_with_variations(context, variation_count, comment_to_reply)
+    except Exception as e:
+        logger.error(f"Error creating context-aware prompt: {str(e)}")
+        # Fall back to basic prompt if context collection fails
+        return _create_basic_prompt(submission.title, submission.selftext)
+
+
+def _create_basic_prompt(title: str, body: str) -> str:
+    """
+    Format the submission into a basic prompt for the LLM (fallback method).
     
     Args:
         title (str): The title of the Reddit submission
@@ -126,12 +159,51 @@ def clean_response(text: str) -> str:
     return text
 
 
+def generate_comment_from_submission(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2, comment_to_reply: Optional[Comment] = None) -> str:
+    """
+    Generate a comment for a Reddit submission using an external LLM with context-aware prompting.
+    
+    This function takes a Reddit submission and uses context-aware prompt engineering
+    to generate a relevant, helpful comment using OpenAI's API.
+    
+    Args:
+        submission (Submission): The Reddit submission.
+        reddit_instance (praw.Reddit): Authenticated Reddit instance for context collection.
+        variation_count (int): Number of variations to apply to the prompt.
+        comment_to_reply (Optional[Comment]): If provided, generate a reply to this comment instead of the submission.
+        
+    Returns:
+        str: A generated comment that is relevant to the submission.
+        
+    Note:
+        If the API call fails, this will return a hardcoded placeholder string.
+    """
+    try:
+        # Create the context-aware prompt with variations
+        prompt = create_prompt(submission, reddit_instance, variation_count, comment_to_reply)
+        
+        # Log the prompt for debugging (but not in production)
+        if os.getenv("DEBUG_MODE", "").lower() == "true":
+            logger.debug(f"Generated prompt:\n{prompt}")
+        
+        # Call the API
+        generated_text = call_openai_api(prompt)
+        
+        # Process and return the response
+        return clean_response(generated_text)
+    except Exception as e:
+        logger.error(f"Failed to generate comment: {str(e)}")
+        return "This is a helpful, AI-generated placeholder comment."
+
+
 def generate_comment(submission_title: str, submission_body: str) -> str:
     """
     Generate a comment for a Reddit submission using an external LLM.
     
     This function takes the title and body of a Reddit submission as context
     and uses them to generate a relevant, helpful comment using OpenAI's API.
+    
+    This is a legacy method maintained for backward compatibility.
     
     Args:
         submission_title (str): The title of the Reddit submission.
@@ -149,8 +221,8 @@ def generate_comment(submission_title: str, submission_body: str) -> str:
         >>> comment = generate_comment(title, body)
     """
     try:
-        # Create the prompt
-        prompt = create_prompt(submission_title, submission_body)
+        # Create the basic prompt
+        prompt = _create_basic_prompt(submission_title, submission_body)
         
         # Call the API
         generated_text = call_openai_api(prompt)
@@ -164,8 +236,24 @@ def generate_comment(submission_title: str, submission_body: str) -> str:
 
 if __name__ == "__main__":
     # Example usage
-    example_title = "Help with my homework assignment"
-    example_body = "I'm struggling to understand how to solve this math problem: If x^2 + 5x + 6 = 0, what are the values of x?"
+    from src.config import get_reddit_instance
     
-    comment = generate_comment(example_title, example_body)
-    print(f"Generated comment: {comment}") 
+    # Get Reddit instance
+    reddit = get_reddit_instance("my_first_bot")
+    
+    # Get a submission
+    submission_id = "1lu5snp"  # Replace with a real submission ID
+    submission = reddit.submission(id=submission_id)
+    
+    print(f"Generating comment for the following post:")
+    print(f"Title: {submission.title}")
+    print(f"Body: {submission.selftext[:100]}...")
+    print()
+    
+    print("Generating comment...")
+    comment = generate_comment_from_submission(submission, reddit)
+    
+    print("\nGenerated Comment:")
+    print("-" * 50)
+    print(comment)
+    print("-" * 50)
