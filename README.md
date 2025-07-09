@@ -1,121 +1,85 @@
-# Project Authentica: AI-Assisted Reddit Bot
+# Project Authentica
 
-This document serves as the official `README.md` for the Project Authentica. Project Authentica is a Reddit bot system that posts AI-generated comments using OpenAI's API.
+A sophisticated Reddit bot system that posts AI-generated comments using OpenAI's API.
 
----
+## Features
 
-## 🤖 Standing Orders for AI Assistant
+### Phase 1: Basic Bot
+- Reddit API integration using PRAW
+- Scheduler for periodic posting
+- Basic database for tracking posts
+- Simple prompt engineering
 
-**These rules must be followed for all code generation and modification tasks:**
+### Phase 2: Context-Aware Responses
+- Enhanced context collection (subreddit, post, temporal factors)
+- Dynamic template system
+- Improved prompt engineering
+- Better database schema
 
-1.  **Unit Testing is Mandatory:** For every new function or class method containing business logic, generate a corresponding unit test.
-    * **Framework:** Use the `pytest` framework for all tests. You will need to add it to `requirements.txt`.
-    * **Location:** All test files must be placed in a parallel `tests/` directory at the project root. The structure inside `tests/` must mirror the `src/` directory (e.g., tests for `src/agent.py` go into `tests/test_agent.py`).
-    * **Mocking:** Use `pytest-mock` or `unittest.mock` to isolate functions and classes from external dependencies like network requests (PRAW API calls) and database connections during testing.
+### Phase 3: Human-like Variations
+- Sophisticated prompt templates
+- Natural language variations
+- Persona-based responses
+- Comment-to-comment reply functionality
 
-2.  **Code Quality & Style:**
-    * **Docstrings & Type Hinting:** All functions, classes, and methods must include comprehensive Google-style docstrings and full Python type hinting.
-    * **Modularity:** Keep functions and classes focused on a single responsibility. If a component becomes overly complex, refactor it into smaller, more manageable units.
+### Phase 4: Advanced Thread Analysis
+- Full thread ingestion and hierarchical comment forest analysis
+- Conversation flow understanding with pattern detection
+- Adaptive response strategies based on thread characteristics
+- Integration with the existing prompt engineering system
 
-3.  **Security First:**
-    * **No Hardcoded Secrets:** Never write sensitive information like API keys, secrets, or passwords directly in the source code. Always retrieve them from configuration files (`praw.ini`) or environment variables.
+## Architecture
 
-4.  **Robust Error Handling:**
-    * Implement specific and robust `try...except` blocks for all operations that can fail, especially network I/O (API calls), file operations, and database interactions. Avoid generic `except Exception:`.
+The system consists of several components:
 
----
+1. **Agent**: Main bot logic for selecting posts and scheduling
+2. **Context Collector**: Gathers relevant context about posts
+3. **Template System**: Dynamic templates for different scenarios
+4. **Variation Engine**: Adds human-like variations to responses
+5. **Thread Analyzer**: Analyzes conversation patterns and dynamics
+6. **Response Strategist**: Determines optimal response approaches
 
-## Setup Instructions
+## Usage
 
-### 1. Install Dependencies
+### Configuration
 
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Configure Reddit API Credentials
-
-Before running the bot, you need to set up your Reddit API credentials in the `praw.ini` file:
-
-1. Create a Reddit App at https://www.reddit.com/prefs/apps
-2. Select "script" as the application type
-3. Set the redirect URI to http://localhost:8080
-4. After creating the app, you'll receive a client ID and client secret
-5. Edit the `praw.ini` file in the project root with your credentials:
-
-```ini
-[my_first_bot]
-client_id=YOUR_CLIENT_ID_FROM_REDDIT
-client_secret=YOUR_CLIENT_SECRET_FROM_REDDIT
-user_agent=python:project_authentica:v1.0 (by /u/YOUR_REDDIT_USERNAME)
-username=YOUR_BOTS_REDDIT_USERNAME
-password=YOUR_BOTS_REDDIT_PASSWORD
-```
-
-### 3. Configure OpenAI API
-
-1. Copy `env.example` to `.env`
-2. Add your OpenAI API key to the `.env` file:
+Create a `.env` file with:
 
 ```
-OPENAI_API_KEY=your_openai_api_key_here
-LLM_MODEL=gpt-3.5-turbo
-LLM_TEMPERATURE=0.7
-LLM_MAX_TOKENS=250
+REDDIT_CLIENT_ID=your_client_id
+REDDIT_CLIENT_SECRET=your_client_secret
+REDDIT_USERNAME=your_username
+REDDIT_PASSWORD=your_password
+OPENAI_API_KEY=your_openai_key
 ```
 
-### 4. Initialize the Database
+### Running the Bot
 
-```bash
-python src/database.py
+Regular scheduled operation:
 ```
-
-### 5. Run the Bot
-
-```bash
 python src/main.py
 ```
 
-## Project Structure
+Single run for testing:
+```
+python scripts/run_once.py
+```
 
-- `src/`: Source code for the application
-  - `main.py`: Main entry point for the application
-  - `agent.py`: Contains the KarmaAgent class for Reddit interactions
-  - `config.py`: Handles Reddit API authentication
-  - `database.py`: Manages database connections and schema
-  - `llm_handler.py`: Handles interactions with language models
-  - `utils.py`: Utility functions for the project
+Thread analysis testing:
+```
+python scripts/test_thread_analysis.py [submission_id]
+```
 
-- `tests/`: Unit tests for the application
-  - `test_agent.py`: Tests for the KarmaAgent class
-  - `test_utils.py`: Tests for utility functions
-  - `test_llm_handler.py`: Tests for the LLM handler
+## Development
 
-- `scripts/`: Utility scripts for testing and running the bot
-  - `test_bot_run.py`: Test the bot on r/testingground4bots
-  - `test_run.py`: Run the bot without the scheduler
-  - `test_openai.py`: Test the OpenAI integration
-  - `check_comment.py`: Check comments made by the bot
+### Adding New Templates
 
-- `docs/`: Documentation files
-  - `scope.md`: Comprehensive project scope and roadmap
+Create a new class in `src/context/templates.py` that inherits from `BasePromptTemplate`.
 
-- `data/`: Database and data files (not tracked in git)
+### Adding New Variations
 
-## Database Schema
+Add new variation functions to the `VariationEngine` class in `src/context/templates.py`.
 
-The project uses SQLite with the following tables:
+### Adding New Response Strategies
 
-- `bots`: Stores information about Reddit bots
-- `actions_log`: Logs all actions performed by the bots
-- `comment_performance`: Tracks performance metrics of comments
-
-## Security Notes
-
-- The `praw.ini` file contains sensitive information and is excluded from version control
-- The `.env` file contains OpenAI API keys and is excluded from version control
-- All data is stored locally in the `data/` directory, which is also excluded from version control
-
-## Development Roadmap
-
-For a detailed roadmap of planned features and improvements, see [docs/scope.md](docs/scope.md).
+Add new strategy types to the `StrategyType` enum in `src/thread_analysis/strategies.py` and update the `ResponseStrategy` class.

@@ -33,9 +33,12 @@ BOT_USERNAME = "my_first_bot"
 TARGET_SUBREDDIT = 'formula1'  # Using Formula 1 subreddit
 POST_LIMIT = 1  # Only process 1 post
 
+# Enable thread analysis
+os.environ["ENABLE_THREAD_ANALYSIS"] = "true"
+
 def main():
     """Run the agent once to post a comment with all new features."""
-    logger.info("Starting one-time run of Project Authentica...")
+    logger.info("Starting one-time run of Project Authentica with advanced thread analysis...")
     
     try:
         # Initialize database
@@ -109,6 +112,41 @@ def main():
             print(f"Author: {comment['author']}")
             print(f"Content: {comment['body'][:150]}..." if len(comment['body']) > 150 else f"Content: {comment['body']}")
             print()
+        
+        # Perform thread analysis
+        try:
+            from src.thread_analysis.analyzer import ThreadAnalyzer
+            from src.thread_analysis.strategies import ResponseStrategy
+            
+            # Create thread analyzer
+            analyzer = ThreadAnalyzer(reddit)
+            
+            # Perform analysis
+            print("\n=== PERFORMING ADVANCED THREAD ANALYSIS ===\n")
+            thread_analysis = analyzer.analyze_thread(suitable_post)
+            
+            # Print basic stats
+            print(f"Comment count: {thread_analysis['comment_count']}")
+            print(f"Thread depth: {thread_analysis['thread_depth']}")
+            print(f"Key topics: {', '.join(thread_analysis['key_topics'])}")
+            
+            # Generate response strategy
+            strategy_generator = ResponseStrategy()
+            strategy = strategy_generator.determine_strategy(thread_analysis, context)
+            
+            # Print strategy
+            print("\n=== SELECTED RESPONSE STRATEGY ===\n")
+            print(f"Strategy type: {strategy['type']}")
+            print(f"Reasoning: {strategy['reasoning']}")
+            
+            if strategy['target_comment']:
+                print(f"Target comment: {strategy['target_comment']['id']} by {strategy['target_comment']['author']}")
+            else:
+                print("Target: Direct reply to submission")
+        except ImportError:
+            print("\nThread analysis modules not available. Skipping advanced analysis.")
+        except Exception as e:
+            print(f"\nError in thread analysis: {str(e)}")
         
         # Show template selection and variations
         template_selector = TemplateSelector()
