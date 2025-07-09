@@ -59,6 +59,38 @@ def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variatio
         collector = ContextCollector(reddit_instance)
         context = collector.collect_context(submission)
         
+        # If thread analysis is enabled, perform advanced analysis
+        if os.getenv("ENABLE_THREAD_ANALYSIS", "").lower() == "true":
+            try:
+                from src.thread_analysis.analyzer import ThreadAnalyzer
+                from src.thread_analysis.strategies import ResponseStrategy
+                
+                # Perform thread analysis
+                analyzer = ThreadAnalyzer(reddit_instance)
+                thread_analysis = analyzer.analyze_thread(submission)
+                
+                # Determine response strategy
+                strategy_generator = ResponseStrategy()
+                strategy = strategy_generator.determine_strategy(thread_analysis, context)
+                
+                # Add strategy information to context
+                context["thread_analysis"] = thread_analysis
+                context["response_strategy"] = strategy
+                
+                logger.info(f"Using response strategy: {strategy['type']}")
+                
+                # If strategy specifies a target comment and we don't already have one, use it
+                if strategy["target_comment"] and not comment_to_reply:
+                    # Find the comment in the submission
+                    for comment in submission.comments.list():
+                        if hasattr(comment, "id") and comment.id == strategy["target_comment"].get("id"):
+                            comment_to_reply = comment
+                            break
+            except ImportError:
+                logger.warning("Thread analysis modules not available, skipping advanced analysis")
+            except Exception as e:
+                logger.error(f"Error in thread analysis: {str(e)}")
+        
         # Select template and generate prompt with variations
         selector = TemplateSelector()
         return selector.generate_with_variations(context, variation_count, comment_to_reply)

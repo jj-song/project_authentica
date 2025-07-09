@@ -658,6 +658,23 @@ class TemplateSelector:
             
         base_prompt = template.generate(context)
         
+        # Apply response strategy enhancements if available
+        if "response_strategy" in context:
+            strategy = context["response_strategy"]
+            enhancements = strategy.get("prompt_enhancements", {})
+            
+            # Add strategy-specific instructions
+            if "instruction" in enhancements:
+                base_prompt += f"\n\nSpecific instruction: {enhancements['instruction']}"
+            
+            # Add style guidance
+            if "style_guidance" in enhancements:
+                base_prompt += f"\n\nStyle guidance: {enhancements['style_guidance']}"
+            
+            # Add context note
+            if "context_note" in enhancements:
+                base_prompt += f"\n\nAdditional context: {enhancements['context_note']}"
+        
         # Apply variations
         return VariationEngine.apply_variations(base_prompt, variation_count)
 
