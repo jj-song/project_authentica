@@ -110,7 +110,7 @@ def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variatio
                 subreddit_name = str(submission.subreddit)
                 
                 # Get representative samples and subreddit profile
-                samples = sampler.get_representative_samples(subreddit_name, context, count=3)
+                samples = sampler.get_representative_samples(subreddit_name, context, count=5)
                 profile = sampler.get_subreddit_profile(subreddit_name)
                 
                 # Enhance the prompt with humanization

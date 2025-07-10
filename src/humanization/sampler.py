@@ -185,7 +185,7 @@ class CommentSampler:
         
         return comments
     
-    def get_representative_samples(self, subreddit_name: str, context: Dict[str, Any], count: int = 3) -> List[Dict[str, Any]]:
+    def get_representative_samples(self, subreddit_name: str, context: Dict[str, Any], count: int = 5) -> List[Dict[str, Any]]:
         """
         Get representative comments that are similar to the current context.
         
@@ -215,7 +215,7 @@ class CommentSampler:
         
         # Sort by score and select top samples
         filtered_samples.sort(key=lambda c: c['score'], reverse=True)
-        top_samples = filtered_samples[:min(10, len(filtered_samples))]
+        top_samples = filtered_samples[:min(15, len(filtered_samples))]
         
         # Select a diverse set from the top samples
         if len(top_samples) <= count:

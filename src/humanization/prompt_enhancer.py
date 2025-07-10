@@ -34,24 +34,24 @@ def enhance_prompt(base_prompt: str, samples: List[Dict[str, Any]], profile: Dic
     informality_stats = _extract_informality_stats(profile)
     structure_stats = _extract_structure_stats(profile)
     
+    # Format sample comments
+    sample_comments_text = _format_sample_comments(samples, context)
+    
     # Generate humanization instructions
     humanization_instructions = _generate_humanization_instructions(
         length_stats, informality_stats, structure_stats, context
     )
     
-    # Format sample comments
-    sample_comments_text = _format_sample_comments(samples, context)
-    
-    # Combine everything into an enhanced prompt
+    # Combine everything into an enhanced prompt - prioritize examples
     enhanced_prompt = f"""
 {base_prompt}
 
-{humanization_instructions}
-
-Here are some examples of real human comments in this subreddit:
+STUDY THESE REAL EXAMPLES FROM THIS COMMUNITY FIRST:
 {sample_comments_text}
 
-Remember to match the natural style of these examples while addressing the current topic.
+{humanization_instructions}
+
+Remember to write as if you are a regular member of this community. Do not try to be perfect.
 """
     
     return enhanced_prompt
@@ -200,13 +200,9 @@ def _generate_humanization_instructions(
     # Generate informality guidance based on statistics
     informality_guidance = []
     if informality_stats['informality_score'] > 0.7:
-        informality_guidance.append("Be quite casual and conversational.")
+        informality_guidance.append("Be casual and conversational.")
         if informality_stats['contraction_rate'] > 1.5:
             informality_guidance.append("Use plenty of contractions (don't, I'm, you're, etc.).")
-        if informality_stats['emoji_rate'] > 0.5:
-            informality_guidance.append("Include an emoticon like :) or ;) if appropriate.")
-        if informality_stats['multi_punct_rate'] > 0.3:
-            informality_guidance.append("Occasionally use multiple punctuation marks (e.g., !! or ?!).")
     elif informality_stats['informality_score'] > 0.4:
         informality_guidance.append("Be moderately casual and natural.")
         if informality_stats['contraction_rate'] > 0.8:
@@ -214,22 +210,24 @@ def _generate_humanization_instructions(
     else:
         informality_guidance.append("Maintain a somewhat formal but still conversational tone.")
     
-    # Add occasional imperfection instructions
-    imperfection_guidance = []
-    if random.random() < 0.7:  # 70% chance to include imperfection guidance
-        imperfections = [
-            "Include a minor typo or grammatical imperfection if it feels natural.",
-            "Consider starting a sentence with a conjunction (And, But, So) if appropriate.",
-            "Feel free to use sentence fragments occasionally.",
-            "It's okay to use a run-on sentence once if it feels conversational.",
-            "Consider using a colloquial expression or informal phrasing.",
-        ]
-        imperfection_guidance.append(random.choice(imperfections))
+    # Add imperfection instructions
+    imperfection_guidance = [
+        "Include at least one natural imperfection in your writing.",
+        "This could be a slightly awkward phrasing, a minor grammatical quirk, or a casual sentence fragment."
+    ]
+    
+    # Add specific instructions about usernames and emojis
+    specific_guidance = [
+        "DO NOT address the user by their username (don't use u/ or @ mentions).",
+        "DO NOT use emojis in your response.",
+        "Avoid overly perfect grammar and structure - real humans make small mistakes."
+    ]
     
     # Combine all guidance
     structure_text = " ".join(structure_guidance)
     informality_text = " ".join(informality_guidance)
     imperfection_text = " ".join(imperfection_guidance)
+    specific_text = " ".join(specific_guidance)
     
     instructions = f"""
 IMPORTANT HUMAN-LIKE WRITING GUIDELINES:
@@ -242,13 +240,18 @@ IMPORTANT HUMAN-LIKE WRITING GUIDELINES:
 
 4. NATURAL IMPERFECTIONS: {imperfection_text}
 
-5. AVOID:
+5. CRITICAL RULES:
+   {specific_text}
+
+6. AVOID:
    - Overly formal or academic language
    - Perfect, flawless writing
    - Excessive politeness or hedging
    - Starting with phrases like "As an AI" or "Here's my response"
    - Bullet points or numbered lists (unless they appear in the examples)
    - Excessive formatting
+   - Addressing users by their username
+   - Using emojis
 """
     
     return instructions
@@ -275,9 +278,25 @@ def _format_sample_comments(samples: List[Dict[str, Any]], context: Dict[str, An
         if len(body) > 500:
             body = body[:497] + "..."
         
-        formatted_samples.append(f"EXAMPLE {i} (by u/{sample['author']}, Score: {sample['score']}):\n{body}")
+        # Don't include username in the example label to avoid encouraging username mentions
+        formatted_samples.append(f"EXAMPLE {i} (Score: {sample['score']}):\n{body}")
     
-    return "\n\n".join(formatted_samples)
+    examples_text = "\n\n".join(formatted_samples)
+    
+    # Add explicit instructions to study and mimic the examples
+    study_instructions = """
+IMPORTANT: Study these examples carefully. Notice:
+- Their length and structure
+- How they express ideas naturally
+- The casual imperfections in grammar and phrasing
+- The conversational tone and style
+- How they DON'T address users by username
+- How they DON'T use emojis
+
+Your response should blend in with these examples as if written by the same community members.
+"""
+    
+    return examples_text + "\n\n" + study_instructions
 
 
 if __name__ == "__main__":
