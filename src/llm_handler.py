@@ -18,6 +18,7 @@ from praw.models import Submission, Comment
 
 from src.context.collector import ContextCollector
 from src.context.templates import TemplateSelector
+from src.database import get_db_connection
 
 # Load environment variables
 load_dotenv()
@@ -91,9 +92,41 @@ def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variatio
             except Exception as e:
                 logger.error(f"Error in thread analysis: {str(e)}")
         
-        # Select template and generate prompt with variations
+        # Select template and generate base prompt with variations
         selector = TemplateSelector()
-        return selector.generate_with_variations(context, variation_count, comment_to_reply)
+        base_prompt = selector.generate_with_variations(context, variation_count, comment_to_reply)
+        
+        # If humanization is enabled, enhance the prompt with human-like examples and guidelines
+        if os.getenv("ENABLE_HUMANIZATION", "").lower() == "true":
+            try:
+                from src.humanization.sampler import CommentSampler
+                from src.humanization.prompt_enhancer import enhance_prompt
+                
+                # Get database connection
+                db_conn = get_db_connection()
+                
+                # Create sampler and get samples and profile
+                sampler = CommentSampler(reddit_instance, db_conn)
+                subreddit_name = str(submission.subreddit)
+                
+                # Get representative samples and subreddit profile
+                samples = sampler.get_representative_samples(subreddit_name, context, count=3)
+                profile = sampler.get_subreddit_profile(subreddit_name)
+                
+                # Enhance the prompt with humanization
+                enhanced_prompt = enhance_prompt(base_prompt, samples, profile, context)
+                
+                # Close database connection
+                db_conn.close()
+                
+                logger.info(f"Enhanced prompt with humanization for r/{subreddit_name}")
+                return enhanced_prompt
+            except Exception as e:
+                logger.error(f"Error enhancing prompt with humanization: {str(e)}")
+                # Fall back to base prompt if humanization fails
+                return base_prompt
+        
+        return base_prompt
     except Exception as e:
         logger.error(f"Error creating context-aware prompt: {str(e)}")
         # Fall back to basic prompt if context collection fails
@@ -187,7 +220,7 @@ def clean_response(text: str) -> str:
     # Ensure the comment is within Reddit's character limits (10,000 characters)
     if len(text) > 10000:
         text = text[:9997] + "..."
-        
+    
     return text
 
 

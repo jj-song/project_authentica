@@ -85,15 +85,23 @@ Here are the top comments on this post so far:
 Write a helpful, informative comment that:
 1. Feels natural and conversational, like a real human Redditor
 2. Avoids overly formal or structured language
-3. Might include some casual elements like contractions or colloquialisms
+3. Includes casual elements like contractions, colloquialisms, or even occasional typos
 4. Addresses the post directly and provides value
 5. Fits the tone and style of r/{subreddit["name"]}
 
 Your comment should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
-- Sound too perfect or polished
+- Sound too perfect, polished, or academic
 - Use bullet points or numbered lists unless absolutely necessary
 - Exceed 1000 characters
+- Be overly enthusiastic or agreeable
+
+Include some natural human imperfections:
+- Maybe a typo or two
+- Occasional run-on sentences or sentence fragments
+- Some informal phrasing or slang
+- Varied punctuation (not always perfect)
+- Less structured paragraphs than an essay
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -185,15 +193,23 @@ For r/{subreddit["name"]}, you should adopt a {style["tone"]} tone and a {style[
 Write a comment that:
 1. Feels natural and conversational, like a real human Redditor
 2. Avoids overly formal or structured language
-3. Includes some casual elements like contractions or colloquialisms
+3. Includes casual elements like contractions, colloquialisms, or even occasional typos
 4. Addresses the post directly and provides value
 5. Fits the tone and style of r/{subreddit["name"]}
 
 Your comment should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
-- Sound too perfect or polished
+- Sound too perfect, polished, or academic
 - Use bullet points or numbered lists unless absolutely necessary
 - Exceed 1000 characters
+- Be overly enthusiastic or agreeable
+
+Include some natural human imperfections:
+- Maybe a typo or two
+- Occasional run-on sentences or sentence fragments
+- Some informal phrasing or slang
+- Varied punctuation (not always perfect)
+- Less structured paragraphs than an essay
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -213,27 +229,37 @@ class PersonaBasedTemplate(PromptTemplate):
         "helpful_expert": {
             "description": "You are a knowledgeable expert in the subject matter, sharing insights in a helpful way.",
             "tone": "informative but approachable",
-            "quirks": "Occasionally uses field-specific terminology but explains it well."
+            "quirks": "Occasionally uses field-specific terminology but explains it well. Sometimes gets a bit too technical."
         },
         "casual_enthusiast": {
             "description": "You are an enthusiastic hobbyist who loves discussing this topic.",
             "tone": "excited and casual",
-            "quirks": "Uses exclamation points and expresses genuine excitement. Shares personal anecdotes."
+            "quirks": "Uses exclamation points and expresses genuine excitement. Shares personal anecdotes. Sometimes rambles a bit."
         },
         "thoughtful_advisor": {
             "description": "You are a thoughtful advisor who carefully considers all angles before responding.",
             "tone": "balanced and considerate",
-            "quirks": "Often acknowledges multiple perspectives and nuances."
+            "quirks": "Often acknowledges multiple perspectives and nuances. Occasionally overthinks simple questions."
         },
         "friendly_neighbor": {
             "description": "You are like a friendly neighbor offering advice over the fence.",
             "tone": "warm and conversational",
-            "quirks": "Uses folksy expressions and friendly language. Offers practical advice."
+            "quirks": "Uses folksy expressions and friendly language. Offers practical advice. Sometimes goes off on tangents."
         },
         "curious_questioner": {
             "description": "You are someone who asks thoughtful questions while providing insights.",
             "tone": "inquisitive and engaging",
-            "quirks": "Asks rhetorical questions. Encourages deeper thinking."
+            "quirks": "Asks rhetorical questions. Encourages deeper thinking. Sometimes misses obvious answers."
+        },
+        "casual_commenter": {
+            "description": "You are an everyday Reddit user who's just scrolling through posts.",
+            "tone": "relaxed and informal",
+            "quirks": "Uses lots of internet slang, abbreviations, and doesn't always punctuate perfectly. Types like they're texting a friend."
+        },
+        "tired_night_owl": {
+            "description": "You are someone browsing Reddit late at night when you should be sleeping.",
+            "tone": "slightly drowsy but engaged",
+            "quirks": "Makes occasional typos, has slightly disjointed thoughts, and might ramble a bit. Uses phrases like 'anyway' and 'I should probably sleep but...'"
         }
     }
     
@@ -298,15 +324,23 @@ Personality quirk: {persona["quirks"]}
 Write a comment that:
 1. Feels natural and conversational, like a real human Redditor with the persona described
 2. Avoids overly formal or structured language
-3. Includes some casual elements like contractions or colloquialisms
+3. Includes casual elements like contractions, colloquialisms, or even occasional typos
 4. Addresses the post directly and provides value
 5. Fits the tone and style of your persona
 
 Your comment should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
-- Sound too perfect or polished
+- Sound too perfect, polished, or academic
 - Use bullet points or numbered lists unless absolutely necessary
 - Exceed 1000 characters
+- Be overly enthusiastic or agreeable (unless that's part of your persona)
+
+Include some natural human imperfections that match your persona:
+- Maybe a typo or two
+- Occasional run-on sentences or sentence fragments
+- Some informal phrasing or slang
+- Varied punctuation (not always perfect)
+- Less structured paragraphs than an essay
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -429,15 +463,25 @@ Here are the top comments on this post so far:
 Write a helpful, informative comment that:
 1. Feels natural and conversational, like a real human Redditor
 2. Avoids overly formal or structured language
-3. Might include some casual elements like contractions or colloquialisms
+3. Includes casual elements like contractions, colloquialisms, or even occasional typos
 4. Addresses the post directly and provides value
 5. Is appropriate for the content type ({content_type})
 
 Your comment should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
-- Sound too perfect or polished
+- Sound too perfect, polished, or academic
 - Use bullet points or numbered lists unless absolutely necessary
 - Exceed 1000 characters
+- Be overly enthusiastic or agreeable
+
+Include some natural human imperfections:
+- Maybe a typo or two
+- Occasional run-on sentences or sentence fragments
+- Some informal phrasing or slang
+- Varied punctuation (not always perfect)
+- Less structured paragraphs than an essay
+
+For a {content_type} post, make sure your response feels like a genuine {content_type} response from a real person, not a perfectly crafted answer.
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -447,10 +491,9 @@ Just write the comment text directly, without any additional formatting or expla
 
 class CommentReplyTemplate(PromptTemplate):
     """
-    Template for generating replies to comments.
+    Template for replying to an existing comment.
     
-    This template is specifically designed for replying to existing comments
-    rather than directly to the submission.
+    This template generates a prompt for replying to a specific comment.
     """
     
     def generate(self, context: Dict[str, Any]) -> str:
@@ -458,47 +501,55 @@ class CommentReplyTemplate(PromptTemplate):
         Generate a prompt for replying to a comment.
         
         Args:
-            context (Dict[str, Any]): Context information including the comment to reply to.
+            context (Dict[str, Any]): Context information.
             
         Returns:
             str: The generated prompt.
         """
         submission = context["submission"]
         subreddit = context["subreddit"]
-        comment_to_reply = context.get("comment_to_reply", {})
+        comment_to_reply = context.get("comment_to_reply")
         
         if not comment_to_reply:
-            # Fallback to standard template if no comment to reply to
-            return StandardPromptTemplate().generate(context)
-        
-        # Extract comment information
-        comment_author = comment_to_reply.get("author", "[deleted]")
-        comment_body = comment_to_reply.get("body", "")
+            logger.warning("No comment_to_reply found in context, falling back to standard template")
+            standard_template = StandardPromptTemplate()
+            return standard_template.generate(context)
         
         # Generate the prompt
         prompt = f"""
-You are replying to a comment on a Reddit post in r/{subreddit["name"]}.
+You are writing a reply to a comment on a Reddit post in r/{subreddit["name"]}, which is about {subreddit["description"]}.
 
-The original post is:
+The post is:
 Title: {submission["title"]}
 Content: {submission["body"]}
 
-You are specifically replying to this comment by u/{comment_author}:
-"{comment_body}"
+The comment you're replying to:
+Author: {comment_to_reply["author"]}
+Comment: {comment_to_reply["body"]}
 
-Write a natural, conversational reply that:
-1. Directly addresses the specific points or questions in the comment
-2. Maintains a friendly, helpful tone
-3. Feels like a genuine human interaction
-4. Adds value to the conversation
-5. Fits the tone and style of r/{subreddit["name"]}
+Write a reply that:
+1. Feels natural and conversational, like a real human Redditor
+2. Avoids overly formal or structured language
+3. Includes casual elements like contractions, colloquialisms, or even occasional typos
+4. Directly engages with the specific points in the comment you're replying to
+5. Adds value to the conversation
 
 Your reply should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
-- Sound too perfect or polished
+- Sound too perfect, polished, or academic
 - Use bullet points or numbered lists unless absolutely necessary
 - Exceed 800 characters
 - Repeat the same points already made in the comment
+- Be overly enthusiastic or agreeable
+
+Include some natural human imperfections:
+- Maybe a typo or two
+- Occasional run-on sentences or sentence fragments
+- Some informal phrasing or slang
+- Varied punctuation (not always perfect)
+- Less structured paragraphs than an essay
+
+Remember that you're having a conversation with another person - your reply should feel natural, not like a formal essay response.
 
 Just write the reply text directly, without any additional formatting or explanation.
 """
@@ -519,6 +570,9 @@ class VariationEngine:
         "Be especially supportive and empathetic.",
         "Be concise and to the point.",
         "Be thoughtful and reflective.",
+        "Be slightly skeptical or questioning.",
+        "Be a bit tired or distracted.",
+        "Sound like you're typing quickly without overthinking.",
     ]
     
     STYLE_VARIATIONS = [
@@ -527,14 +581,36 @@ class VariationEngine:
         "Start with a brief reaction to the post before diving into your response.",
         "Include a relevant analogy or metaphor if it helps explain your point.",
         "Acknowledge a point made in one of the existing comments.",
+        "Express mild disagreement with something in the post or comments.",
+        "Start with 'So,' or another conversational opener.",
+        "Use parentheses for asides (like this).",
+        "Trail off with ellipses occasionally...",
     ]
     
     LANGUAGE_VARIATIONS = [
-        "Use a few contractions (e.g., don't, can't, I'm).",
+        "Use contractions (e.g., don't, can't, I'm) liberally.",
         "Include a casual expression or two.",
         "Use a slightly more informal vocabulary.",
         "Include a brief aside in parentheses.",
         "Start a sentence with a conjunction occasionally (And, But, So).",
+        "Use sentence fragments. Just occasionally.",
+        "Mix up your punctuation a bit!",
+        "Throw in an internet abbreviation like tbh, imo, or lol where it feels natural.",
+        "Occasionally skip a comma where it would normally go.",
+        "Use lowercase at the start of a sentence once or twice.",
+    ]
+    
+    IMPERFECTION_VARIATIONS = [
+        "Include one or two minor typos (like transposed letters).",
+        "Have a run-on sentence somewhere in your response.",
+        "Start to make a point but then change direction mid-sentence.",
+        "Use the wrong word in one place (like 'affect' instead of 'effect').",
+        "Use inconsistent spacing after periods.",
+        "Repeat a word accidentally in one sentence.",
+        "Make a self-correction with an asterisk somewhere in your response.",
+        "Leave out a word in one sentence.",
+        "Use inconsistent punctuation styles.",
+        "Write a sentence that's a bit too long and rambling, with multiple thoughts connected by 'and' or commas.",
     ]
     
     @classmethod
@@ -548,7 +624,7 @@ class VariationEngine:
         Returns:
             List[str]: List of variation instructions.
         """
-        all_variations = cls.TONE_VARIATIONS + cls.STYLE_VARIATIONS + cls.LANGUAGE_VARIATIONS
+        all_variations = cls.TONE_VARIATIONS + cls.STYLE_VARIATIONS + cls.LANGUAGE_VARIATIONS + cls.IMPERFECTION_VARIATIONS
         return random.sample(all_variations, min(count, len(all_variations)))
     
     @classmethod
