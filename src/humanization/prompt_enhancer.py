@@ -51,7 +51,7 @@ STUDY THESE REAL EXAMPLES FROM THIS COMMUNITY FIRST:
 
 {humanization_instructions}
 
-Remember to write as if you are a regular member of this community. Do not try to be perfect.
+Remember to write as if you are a regular member of this community. Be direct and natural. Don't try to be perfect or overly agreeable. Express opinions honestly when appropriate.
 """
     
     return enhanced_prompt
@@ -216,11 +216,14 @@ def _generate_humanization_instructions(
         "This could be a slightly awkward phrasing, a minor grammatical quirk, or a casual sentence fragment."
     ]
     
-    # Add specific instructions about usernames and emojis
+    # Add specific instructions about usernames, emojis, agreeableness, and questions
     specific_guidance = [
         "DO NOT address the user by their username (don't use u/ or @ mentions).",
         "DO NOT use emojis in your response.",
-        "Avoid overly perfect grammar and structure - real humans make small mistakes."
+        "Avoid overly perfect grammar and structure - real humans make small mistakes.",
+        "DON'T be excessively agreeable or overly validating - it's okay to disagree or be neutral when warranted.",
+        "AVOID ending every response with a question just to drive engagement - only ask questions when genuinely relevant.",
+        "DON'T sound like a therapist with excessive empathy statements or validation phrases."
     ]
     
     # Combine all guidance
@@ -252,6 +255,9 @@ IMPORTANT HUMAN-LIKE WRITING GUIDELINES:
    - Excessive formatting
    - Addressing users by their username
    - Using emojis
+   - Being overly agreeable or validating
+   - Adding unnecessary questions at the end of responses
+   - Therapist-like tone with excessive empathy statements
 """
     
     return instructions
@@ -292,6 +298,9 @@ IMPORTANT: Study these examples carefully. Notice:
 - The conversational tone and style
 - How they DON'T address users by username
 - How they DON'T use emojis
+- How they express opinions without being overly agreeable
+- How they don't always end with engagement questions
+- The natural, straightforward way they make points
 
 Your response should blend in with these examples as if written by the same community members.
 """
