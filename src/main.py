@@ -9,6 +9,8 @@ import time
 import signal
 import sys
 import os
+import random
+import datetime
 from typing import NoReturn, Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -182,51 +184,89 @@ def run_once(subreddit_name: str = 'formula1', post_limit: int = 1, verbose: boo
                 for i, variation in enumerate(variations, 1):
                     print(f"Variation {i}: {variation}")
             
-            # Generate the comment directly
-            if verbose:
-                print("\n=== GENERATING COMMENT ===\n")
-            comment_text = generate_comment_from_submission(suitable_post, reddit)
-            if verbose:
-                print(f"Generated Comment:\n{comment_text}\n")
-            
             # Post the comment
             if verbose:
                 print("\n=== POSTING COMMENT ===\n")
             try:
-                # Try to find a suitable comment to reply to
+                # Replace MoreComments objects to get a flattened comment tree
+                suitable_post.comments.replace_more(limit=0)
+                
+                # Filter for comments that:
+                # 1. Have a positive score
+                # 2. Are not from the bot itself
+                # 3. Have some substance (not too short)
                 eligible_comments = [
                     comment for comment in suitable_post.comments
                     if (comment.score > 0 and 
                         str(comment.author) != agent.username and
-                        len(comment.body) >= 20 and
-                        comment.author != "AutoModerator")
+                        len(comment.body) >= 20)
                 ]
                 
-                if eligible_comments and len(eligible_comments) > 0:
-                    # Sort by score and select one from the top
+                if eligible_comments:
+                    # Sort by score and select a comment from the top 3 (if available)
                     eligible_comments.sort(key=lambda c: c.score, reverse=True)
-                    selected_comment = eligible_comments[0]
+                    top_comments = eligible_comments[:min(3, len(eligible_comments))]
+                    selected_comment = random.choice(top_comments)
+                    
                     if verbose:
                         print(f"Replying to comment by {selected_comment.author}: {selected_comment.body[:100]}...")
+                        print(f"Comment score: {selected_comment.score}")
                     
-                    # Generate a reply
+                    # Generate a reply using context-aware LLM handler
                     reply_text = generate_comment_from_submission(suitable_post, reddit, comment_to_reply=selected_comment)
+                    
                     if verbose:
                         print(f"Generated Reply:\n{reply_text}\n")
                     
                     # Post the reply
                     reply = selected_comment.reply(reply_text)
+                    
                     if verbose:
                         print(f"Reply posted successfully! Comment ID: {reply.id}")
                         print(f"View at: https://www.reddit.com{suitable_post.permalink}{selected_comment.id}/{reply.id}/")
+                    
+                    # Create a record in comment_performance table
+                    current_time = datetime.datetime.now().isoformat()
+                    cursor = db_conn.cursor()
+                    cursor.execute(
+                        """
+                        INSERT INTO comment_performance 
+                        (comment_id, submission_id, subreddit, initial_score, current_score, last_checked) 
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (reply.id, suitable_post.id, subreddit_name, 1, 1, current_time)
+                    )
+                    db_conn.commit()
                 else:
-                    # Post directly to the submission
+                    # No suitable comments found, post directly to the submission
                     if verbose:
                         print("No suitable comments found. Posting directly to submission...")
+                    
+                    # Generate the comment directly
+                    comment_text = generate_comment_from_submission(suitable_post, reddit)
+                    
+                    if verbose:
+                        print(f"Generated Comment:\n{comment_text}\n")
+                    
+                    # Post the comment
                     comment = suitable_post.reply(comment_text)
+                    
                     if verbose:
                         print(f"Comment posted successfully! Comment ID: {comment.id}")
                         print(f"View at: https://www.reddit.com{suitable_post.permalink}{comment.id}/")
+                    
+                    # Create a record in comment_performance table
+                    current_time = datetime.datetime.now().isoformat()
+                    cursor = db_conn.cursor()
+                    cursor.execute(
+                        """
+                        INSERT INTO comment_performance 
+                        (comment_id, submission_id, subreddit, initial_score, current_score, last_checked) 
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (comment.id, suitable_post.id, subreddit_name, 1, 1, current_time)
+                    )
+                    db_conn.commit()
             
             except Exception as e:
                 logger.error(f"Error posting comment: {str(e)}")
