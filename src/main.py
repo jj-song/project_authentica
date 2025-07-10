@@ -213,7 +213,7 @@ def run_once(subreddit_name: str = 'formula1', post_limit: int = 1, verbose: boo
                         print(f"Comment score: {selected_comment.score}")
                     
                     # Generate a reply using context-aware LLM handler
-                    reply_text = generate_comment_from_submission(suitable_post, reddit, comment_to_reply=selected_comment)
+                    reply_text = generate_comment_from_submission(suitable_post, reddit, comment_to_reply=selected_comment, verbose=verbose)
                     
                     if verbose:
                         print(f"Generated Reply:\n{reply_text}\n")
@@ -243,7 +243,7 @@ def run_once(subreddit_name: str = 'formula1', post_limit: int = 1, verbose: boo
                         print("No suitable comments found. Posting directly to submission...")
                     
                     # Generate the comment directly
-                    comment_text = generate_comment_from_submission(suitable_post, reddit)
+                    comment_text = generate_comment_from_submission(suitable_post, reddit, verbose=verbose)
                     
                     if verbose:
                         print(f"Generated Comment:\n{comment_text}\n")
