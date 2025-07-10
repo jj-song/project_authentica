@@ -1,6 +1,57 @@
 # Project Authentica
 
-A sophisticated Reddit bot system that posts AI-generated comments using OpenAI's API.
+An advanced Reddit bot system that posts AI-generated comments using OpenAI's API with sophisticated context awareness and thread analysis capabilities.
+
+## Overview
+
+Project Authentica is a sophisticated Reddit bot that uses OpenAI's API to generate context-aware, human-like comments on Reddit posts. The system analyzes thread structure, conversation patterns, and post context to create appropriate and engaging responses.
+
+Key features:
+- Advanced thread analysis and conversation pattern detection
+- Context-aware prompt engineering with multiple template types
+- Dynamic response strategy selection based on thread characteristics
+- Human-like variations in response style and tone
+- Flexible scheduling for automated or one-time operation
+
+## Architecture
+
+The system follows this general workflow:
+1. **Thread Selection**: Finds suitable Reddit threads to engage with
+2. **Context Collection**: Gathers context from submission, subreddit, and comments
+3. **Thread Analysis**: Analyzes conversation structure and patterns
+4. **Strategy Selection**: Determines optimal response approach
+5. **Template Selection**: Chooses appropriate template based on context
+6. **Response Generation**: Generates human-like response using OpenAI API
+7. **Posting**: Posts the response to Reddit
+
+## Directory Structure
+
+```
+project_authentica/
+├── src/                    # Source code
+│   ├── agent.py            # KarmaAgent class for Reddit interactions
+│   ├── config.py           # Configuration utilities
+│   ├── database.py         # Database handling
+│   ├── llm_handler.py      # OpenAI API integration
+│   ├── main.py             # Main entry point with scheduler
+│   ├── utils.py            # Utility functions
+│   ├── context/            # Context collection and templates
+│   │   ├── collector.py    # Gathers context from Reddit
+│   │   └── templates.py    # Prompt templates and variations
+│   └── thread_analysis/    # Thread analysis components
+│       ├── analyzer.py     # Thread structure analysis
+│       ├── conversation.py # Conversation flow analysis
+│       └── strategies.py   # Response strategy determination
+├── scripts/                # Utility scripts
+│   ├── run_once.py         # Run the bot once without scheduler
+│   ├── test_thread_analysis.py # Test thread analysis features
+│   ├── show_context.py     # Display context collection results
+│   └── view_comment.py     # View generated comments
+├── docs/                   # Documentation
+│   ├── scope.md            # Project scope document
+│   └── testing_plan.md     # Testing strategy and plan
+└── tests/                  # Unit tests
+```
 
 ## Features
 
@@ -28,58 +79,184 @@ A sophisticated Reddit bot system that posts AI-generated comments using OpenAI'
 - Adaptive response strategies based on thread characteristics
 - Integration with the existing prompt engineering system
 
-## Architecture
+## Detailed Features
 
-The system consists of several components:
+### Thread Analysis
+The thread analysis module examines Reddit threads to understand conversation structure, patterns, and dynamics. It identifies:
+- Conversation depth and breadth
+- Key topics and sentiment
+- User engagement patterns
+- Discussion hotspots
 
-1. **Agent**: Main bot logic for selecting posts and scheduling
-2. **Context Collector**: Gathers relevant context about posts
-3. **Template System**: Dynamic templates for different scenarios
-4. **Variation Engine**: Adds human-like variations to responses
-5. **Thread Analyzer**: Analyzes conversation patterns and dynamics
-6. **Response Strategist**: Determines optimal response approaches
+### Context Collection
+The context collector gathers relevant information from multiple sources:
+- Submission content and metadata
+- Subreddit information and rules
+- Comment history and patterns
+- Temporal context (time of day, day of week)
+
+### Response Strategies
+Based on thread analysis, the system selects optimal response strategies:
+- **Question Answerer**: Provides helpful answers to questions
+- **Conversation Joiner**: Engages with ongoing discussions
+- **Direct Reply**: Responds directly to the submission
+- **Hotspot Engagement**: Participates in active discussion areas
+- **Popular Comment**: Replies to comments with high engagement
+
+### Template System
+The template system selects appropriate prompt templates based on context:
+- **Standard**: General-purpose template
+- **Subreddit-specific**: Customized for particular subreddits
+- **Persona-based**: Uses different personas for variety
+- **Content-type**: Adapts to questions, discussions, or advice requests
+- **Comment Reply**: Specialized for replying to comments
+
+### Human-like Variations
+To create more natural responses, the system applies variations to:
+- Tone (casual, formal, humorous)
+- Style (anecdotal, questioning, reflective)
+- Language patterns (contractions, casual expressions)
 
 ## Usage
 
-### Configuration
+### Installation
 
-Create a `.env` file with:
-
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/project_authentica.git
+cd project_authentica
 ```
-REDDIT_CLIENT_ID=your_client_id
-REDDIT_CLIENT_SECRET=your_client_secret
-REDDIT_USERNAME=your_username
-REDDIT_PASSWORD=your_password
-OPENAI_API_KEY=your_openai_key
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+3. Set up environment variables:
+```bash
+cp env.example .env
+# Edit .env with your API keys and settings
 ```
 
 ### Running the Bot
 
-Regular scheduled operation:
-```
-python src/main.py
-```
-
-Single run for testing:
-```
-python scripts/run_once.py
+#### With Scheduler (continuous operation)
+```bash
+python -m src.main
 ```
 
-Thread analysis testing:
+#### One-time Execution
+```bash
+# Using main.py with --once flag
+python -m src.main --once [subreddit] [post_limit] [verbose]
+
+# Example: 
+python -m src.main --once formula1 1 true
+
+# Using the wrapper script
+python scripts/run_once.py --subreddit [name] --limit [num] [--quiet]
+
+# Example:
+python scripts/run_once.py --subreddit formula1 --limit 1
 ```
-python scripts/test_thread_analysis.py [submission_id]
+
+## Configuration
+
+Create a `.env` file with the following variables:
+```
+# OpenAI API Configuration
+OPENAI_API_KEY=your_openai_api_key
+
+# LLM Settings
+LLM_MODEL=gpt-3.5-turbo
+LLM_TEMPERATURE=0.7
+LLM_MAX_TOKENS=250
+
+# Thread Analysis
+ENABLE_THREAD_ANALYSIS=true
+```
+
+Create a `praw.ini` file with your Reddit API credentials:
+```
+[my_first_bot]
+client_id=your_client_id
+client_secret=your_client_secret
+user_agent=python:project_authentica:v1.0 (by /u/YourUsername)
+username=your_reddit_username
+password=your_reddit_password
 ```
 
 ## Development
 
 ### Adding New Templates
 
-Create a new class in `src/context/templates.py` that inherits from `BasePromptTemplate`.
+Create a new class in `src/context/templates.py` that inherits from `PromptTemplate`:
+
+```python
+class MyCustomTemplate(PromptTemplate):
+    def generate(self, context: Dict[str, Any]) -> str:
+        # Custom template generation logic
+        return prompt_text
+```
 
 ### Adding New Variations
 
-Add new variation functions to the `VariationEngine` class in `src/context/templates.py`.
+Add new variation types to the `VariationEngine` class in `src/context/templates.py`:
+
+```python
+# Add to existing variation types
+NEW_VARIATIONS = [
+    "Be slightly more technical in your explanation.",
+    "Use more descriptive language.",
+]
+```
 
 ### Adding New Response Strategies
 
-Add new strategy types to the `StrategyType` enum in `src/thread_analysis/strategies.py` and update the `ResponseStrategy` class.
+Add new strategy types to the `ResponseStrategy` class in `src/thread_analysis/strategies.py`:
+
+```python
+# In the determine_strategy method
+if some_condition:
+    return {
+        "type": "my_new_strategy",
+        "reasoning": "This strategy works because...",
+        "target_comment": target_comment,
+        "prompt_enhancements": {
+            "instruction": "Special instruction for this strategy",
+            "style_guidance": "Style guidance specific to this strategy"
+        }
+    }
+```
+
+## Testing
+
+The project includes comprehensive unit tests for all components. See `docs/testing_plan.md` for the complete testing strategy.
+
+To run tests:
+```bash
+pytest
+```
+
+To run specific test modules:
+```bash
+pytest tests/test_agent.py
+```
+
+## Development Roadmap
+
+### Completed
+- ✅ Basic bot functionality with OpenAI integration
+- ✅ Context-aware prompt engineering
+- ✅ Advanced thread analysis
+- ✅ Multiple response strategies
+- ✅ Template system with variations
+
+### In Progress
+- 🔄 Human-like response improvements
+- 🔄 Comprehensive testing suite
+
+### Planned
+- 📅 Performance tracking and analytics
+- 📅 Multi-subreddit optimization
+- 📅 Conversation memory and continuity
