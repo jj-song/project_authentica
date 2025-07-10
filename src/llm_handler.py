@@ -18,7 +18,7 @@ from praw.models import Submission, Comment
 
 from src.context.collector import ContextCollector
 from src.context.templates import TemplateSelector
-from src.humanizer import humanize_text
+from src.database import get_db_connection
 
 # Load environment variables
 load_dotenv()
@@ -40,7 +40,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 LLM_MODEL = os.getenv("LLM_MODEL", DEFAULT_MODEL)
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", DEFAULT_TEMPERATURE))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS))
-HUMANIZATION_LEVEL = float(os.getenv("HUMANIZATION_LEVEL", "0.5"))
 
 
 def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2, comment_to_reply: Optional[Comment] = None) -> str:
@@ -93,9 +92,41 @@ def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variatio
             except Exception as e:
                 logger.error(f"Error in thread analysis: {str(e)}")
         
-        # Select template and generate prompt with variations
+        # Select template and generate base prompt with variations
         selector = TemplateSelector()
-        return selector.generate_with_variations(context, variation_count, comment_to_reply)
+        base_prompt = selector.generate_with_variations(context, variation_count, comment_to_reply)
+        
+        # If humanization is enabled, enhance the prompt with human-like examples and guidelines
+        if os.getenv("ENABLE_HUMANIZATION", "").lower() == "true":
+            try:
+                from src.humanization.sampler import CommentSampler
+                from src.humanization.prompt_enhancer import enhance_prompt
+                
+                # Get database connection
+                db_conn = get_db_connection()
+                
+                # Create sampler and get samples and profile
+                sampler = CommentSampler(reddit_instance, db_conn)
+                subreddit_name = str(submission.subreddit)
+                
+                # Get representative samples and subreddit profile
+                samples = sampler.get_representative_samples(subreddit_name, context, count=3)
+                profile = sampler.get_subreddit_profile(subreddit_name)
+                
+                # Enhance the prompt with humanization
+                enhanced_prompt = enhance_prompt(base_prompt, samples, profile, context)
+                
+                # Close database connection
+                db_conn.close()
+                
+                logger.info(f"Enhanced prompt with humanization for r/{subreddit_name}")
+                return enhanced_prompt
+            except Exception as e:
+                logger.error(f"Error enhancing prompt with humanization: {str(e)}")
+                # Fall back to base prompt if humanization fails
+                return base_prompt
+        
+        return base_prompt
     except Exception as e:
         logger.error(f"Error creating context-aware prompt: {str(e)}")
         # Fall back to basic prompt if context collection fails
@@ -125,10 +156,6 @@ def _create_basic_prompt(title: str, body: str) -> str:
     - Friendly and conversational
     - Under 500 characters
     - Without any prefixes like 'Here's my response:'
-    
-    Write like a real human Reddit user. Include some natural imperfections in your writing,
-    such as occasional typos, informal language, contractions, and varied sentence structure.
-    Don't be too perfect or overly formal.
     """
 
 
@@ -162,7 +189,7 @@ def call_openai_api(prompt: str) -> str:
         response = client.chat.completions.create(
             model=LLM_MODEL,
             messages=[
-                {"role": "system", "content": "You are a helpful Reddit commenter providing valuable information. Write like a real human with occasional typos, informal language, and natural speech patterns."},
+                {"role": "system", "content": "You are a helpful Reddit commenter providing valuable information."},
                 {"role": "user", "content": prompt}
             ],
             temperature=LLM_TEMPERATURE,
@@ -179,31 +206,22 @@ def call_openai_api(prompt: str) -> str:
 
 def clean_response(text: str) -> str:
     """
-    Clean and format the API response, then apply humanization.
+    Clean and format the API response.
     
     Args:
         text (str): The raw text from the API
         
     Returns:
-        str: Cleaned, formatted, and humanized text suitable for a Reddit comment
+        str: Cleaned and formatted text suitable for a Reddit comment
     """
-    # Basic cleaning
-    cleaned_text = text
+    # Remove any markdown formatting that might cause issues
+    # For now, just do basic cleaning
     
     # Ensure the comment is within Reddit's character limits (10,000 characters)
-    if len(cleaned_text) > 10000:
-        cleaned_text = cleaned_text[:9997] + "..."
+    if len(text) > 10000:
+        text = text[:9997] + "..."
     
-    # Apply humanization if enabled
-    if HUMANIZATION_LEVEL > 0:
-        try:
-            # Apply humanization with the configured level
-            cleaned_text = humanize_text(cleaned_text, HUMANIZATION_LEVEL)
-            logger.info(f"Applied humanization at level {HUMANIZATION_LEVEL}")
-        except Exception as e:
-            logger.error(f"Error applying humanization: {str(e)}")
-    
-    return cleaned_text
+    return text
 
 
 def generate_comment_from_submission(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2, comment_to_reply: Optional[Comment] = None) -> str:
@@ -261,9 +279,14 @@ def generate_comment(submission_title: str, submission_body: str) -> str:
         
     Note:
         If the API call fails, this will return a hardcoded placeholder string.
+        
+    Example:
+        >>> title = "Need help with Python dictionary"
+        >>> body = "I'm trying to merge two dictionaries but getting errors."
+        >>> comment = generate_comment(title, body)
     """
     try:
-        # Format the prompt
+        # Create the basic prompt
         prompt = _create_basic_prompt(submission_title, submission_body)
         
         # Call the API
@@ -278,14 +301,24 @@ def generate_comment(submission_title: str, submission_body: str) -> str:
 
 if __name__ == "__main__":
     # Example usage
-    import sys
+    from src.config import get_reddit_instance
     
-    if len(sys.argv) > 2:
-        title = sys.argv[1]
-        body = sys.argv[2]
-        
-        print(f"Generating comment for post: {title}")
-        comment = generate_comment(title, body)
-        print(f"\nGenerated comment:\n{comment}")
-    else:
-        print("Usage: python llm_handler.py \"Post Title\" \"Post Body\"")
+    # Get Reddit instance
+    reddit = get_reddit_instance("my_first_bot")
+    
+    # Get a submission
+    submission_id = "1lu5snp"  # Replace with a real submission ID
+    submission = reddit.submission(id=submission_id)
+    
+    print(f"Generating comment for the following post:")
+    print(f"Title: {submission.title}")
+    print(f"Body: {submission.selftext[:100]}...")
+    print()
+    
+    print("Generating comment...")
+    comment = generate_comment_from_submission(submission, reddit)
+    
+    print("\nGenerated Comment:")
+    print("-" * 50)
+    print(comment)
+    print("-" * 50)
