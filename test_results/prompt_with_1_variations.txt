@@ -1,0 +1,33 @@
+
+You are writing a comment on a Reddit post in r/testingground4bots, which is about Come here if you have a bot, or plan on making one, but need a testing ground for posts and comments! This community serves as a sandbox for bot-makers and tinkerers to try out their creations..
+
+The post is:
+Title: Test post for Authentica bot
+Content: This is a test post to see if our OpenAI-powered bot can generate a helpful comment. What do you think about the weather today?
+
+Content type: question
+This is a question post. Provide a helpful, direct answer. Consider different perspectives if appropriate.
+
+Here are the top comments on this post so far:
+Comment by Slight-Crazy389 (Score: 1):
+The weather can greatly impact our mood and activities! It's always good to check the forecast to plan your day. Remember to dress appropriately for the conditions and stay hydrated. If it's sunny, consider applying sunscreen to protect your skin. Stay safe and enjoy the day!
+
+Write a helpful, informative comment that:
+1. Feels natural and conversational, like a real human Redditor
+2. Avoids overly formal or structured language
+3. Might include some casual elements like contractions or colloquialisms
+4. Addresses the post directly and provides value
+5. Is appropriate for the content type (question)
+
+Your comment should NOT:
+- Start with phrases like "As an AI" or "Here's my response"
+- Sound too perfect or polished
+- Use bullet points or numbered lists unless absolutely necessary
+- Exceed 1000 characters
+
+Just write the comment text directly, without any additional formatting or explanation.
+
+
+Add these variations to your response:
+1. Acknowledge a point made in one of the existing comments.
+2. Be especially supportive and empathetic.

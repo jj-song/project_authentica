@@ -7,7 +7,6 @@ Manages all interactions with external Large Language Models.
 import os
 import time
 import logging
-import json
 from typing import Optional, Dict, Any, Union, List
 
 from openai import OpenAI
@@ -15,17 +14,13 @@ from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_excep
 import praw
 from praw.models import Submission, Comment
 
-from src.context.collector import ContextCollector
-from src.context.templates import TemplateSelector
-from src.database import get_db_connection
+from src.response_generator import ResponseGenerator
+from src.utils.logging_utils import get_component_logger
+from src.utils.error_utils import handle_exceptions, LLMError
 from src.config import init_configuration
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = get_component_logger("llm_handler")
 
 # Get configuration
 config = init_configuration()
@@ -35,97 +30,6 @@ OPENAI_API_KEY = config["openai"]["api_key"]
 LLM_MODEL = config["openai"]["model"]
 LLM_TEMPERATURE = config["openai"]["temperature"]
 LLM_MAX_TOKENS = config["openai"]["max_tokens"]
-
-
-def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2, comment_to_reply: Optional[Comment] = None) -> str:
-    """
-    Format the submission into an effective prompt for the LLM using context-aware prompt engineering.
-    
-    Args:
-        submission (Submission): The Reddit submission
-        reddit_instance (praw.Reddit): Authenticated Reddit instance for context collection
-        variation_count (int): Number of variations to apply to the prompt
-        comment_to_reply (Optional[Comment]): If provided, generate a reply to this comment instead of the submission.
-        
-    Returns:
-        str: A formatted prompt for the LLM
-    """
-    try:
-        # Collect context
-        collector = ContextCollector(reddit_instance)
-        context = collector.collect_context(submission)
-        
-        # If thread analysis is enabled, perform advanced analysis
-        if config["features"]["thread_analysis"]:
-            try:
-                from src.thread_analysis.analyzer import ThreadAnalyzer
-                from src.thread_analysis.strategies import ResponseStrategy
-                
-                # Perform thread analysis
-                analyzer = ThreadAnalyzer(reddit_instance)
-                thread_analysis = analyzer.analyze_thread(submission)
-                
-                # Determine response strategy
-                strategy_generator = ResponseStrategy()
-                strategy = strategy_generator.determine_strategy(thread_analysis, context)
-                
-                # Add strategy information to context
-                context["thread_analysis"] = thread_analysis
-                context["response_strategy"] = strategy
-                
-                logger.info(f"Using response strategy: {strategy['type']}")
-                
-                # If strategy specifies a target comment and we don't already have one, use it
-                if strategy["target_comment"] and not comment_to_reply:
-                    # Find the comment in the submission
-                    for comment in submission.comments.list():
-                        if hasattr(comment, "id") and comment.id == strategy["target_comment"].get("id"):
-                            comment_to_reply = comment
-                            break
-            except ImportError:
-                logger.warning("Thread analysis modules not available, skipping advanced analysis")
-            except Exception as e:
-                logger.error(f"Error in thread analysis: {str(e)}")
-        
-        # Select template and generate base prompt with variations
-        selector = TemplateSelector()
-        base_prompt = selector.generate_with_variations(context, variation_count, comment_to_reply)
-        
-        # If humanization is enabled, enhance the prompt with human-like examples and guidelines
-        if config["features"]["humanization"]:
-            try:
-                from src.humanization.sampler import CommentSampler
-                from src.humanization.prompt_enhancer import enhance_prompt
-                
-                # Get database connection
-                db_conn = get_db_connection()
-                
-                # Create sampler and get samples and profile
-                sampler = CommentSampler(reddit_instance, db_conn)
-                subreddit_name = str(submission.subreddit)
-                
-                # Get representative samples and subreddit profile
-                samples = sampler.get_representative_samples(subreddit_name, context, count=5)
-                profile = sampler.get_subreddit_profile(subreddit_name)
-                
-                # Enhance the prompt with humanization
-                enhanced_prompt = enhance_prompt(base_prompt, samples, profile, context)
-                
-                # Close database connection
-                db_conn.close()
-                
-                logger.info(f"Enhanced prompt with humanization for r/{subreddit_name}")
-                return enhanced_prompt
-            except Exception as e:
-                logger.error(f"Error enhancing prompt with humanization: {str(e)}")
-                # Fall back to base prompt if humanization fails
-                return base_prompt
-        
-        return base_prompt
-    except Exception as e:
-        logger.error(f"Error creating context-aware prompt: {str(e)}")
-        # Fall back to basic prompt if context collection fails
-        return _create_basic_prompt(submission.title, submission.selftext)
 
 
 def _create_basic_prompt(title: str, body: str) -> str:
@@ -171,7 +75,7 @@ def call_openai_api(prompt: str, verbose: bool = False) -> str:
         str: The generated text response
         
     Raises:
-        Exception: If the API call fails after retries
+        LLMError: If the API call fails after retries
     """
     if not OPENAI_API_KEY:
         logger.warning("OpenAI API key not found. Using placeholder response.")
@@ -198,112 +102,127 @@ def call_openai_api(prompt: str, verbose: bool = False) -> str:
         )
         
         # Extract the generated text
-        generated_text = response.choices[0].message.content.strip()
+        generated_text = response.choices[0].message.content
         
         if verbose:
-            print("\n=== LLM RESPONSE ===\n")
+            print("\n=== RAW LLM RESPONSE ===\n")
             print(generated_text)
-            
+        
         return generated_text
     except Exception as e:
-        logger.error(f"OpenAI API error: {str(e)}")
-        raise
+        logger.error(f"Error calling OpenAI API: {str(e)}")
+        raise LLMError(f"OpenAI API error: {str(e)}")
 
 
 def clean_response(text: str) -> str:
     """
-    Clean and format the API response.
+    Clean up the LLM response to make it suitable for posting.
     
     Args:
-        text (str): The raw text from the API
+        text (str): The raw text from the LLM
         
     Returns:
-        str: Cleaned and formatted text suitable for a Reddit comment
+        str: Cleaned text ready for posting
     """
-    # Remove any markdown formatting that might cause issues
-    # For now, just do basic cleaning
+    # Remove any markdown code block formatting
+    text = text.replace("```", "")
     
-    # Ensure the comment is within Reddit's character limits (10,000 characters)
-    if len(text) > 10000:
-        text = text[:9997] + "..."
+    # Remove any "As an AI" disclaimers
+    disclaimers = [
+        "as an ai", "as an artificial intelligence", "as a language model",
+        "i'm an ai", "i am an ai", "i'm a language model", "i am a language model"
+    ]
+    
+    lines = text.split("\n")
+    filtered_lines = []
+    for line in lines:
+        if not any(disclaimer in line.lower() for disclaimer in disclaimers):
+            filtered_lines.append(line)
+    
+    text = "\n".join(filtered_lines)
+    
+    # Remove any leading/trailing whitespace
+    text = text.strip()
     
     return text
 
 
+@handle_exceptions
 def generate_comment_from_submission(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2, comment_to_reply: Optional[Comment] = None, verbose: bool = False) -> str:
     """
-    Generate a comment for a Reddit submission using an external LLM with context-aware prompting.
-    
-    This function takes a Reddit submission and uses context-aware prompt engineering
-    to generate a relevant, helpful comment using OpenAI's API.
+    Generate a comment for a Reddit submission using the ResponseGenerator pipeline.
     
     Args:
-        submission (Submission): The Reddit submission.
-        reddit_instance (praw.Reddit): Authenticated Reddit instance for context collection.
-        variation_count (int): Number of variations to apply to the prompt.
-        comment_to_reply (Optional[Comment]): If provided, generate a reply to this comment instead of the submission.
-        verbose (bool): Whether to print detailed information about the process.
+        submission (Submission): The Reddit submission
+        reddit_instance (praw.Reddit): Authenticated Reddit instance
+        variation_count (int): Number of variations to apply
+        comment_to_reply (Optional[Comment]): If provided, generate a reply to this comment
+        verbose (bool): Whether to print detailed information
         
     Returns:
-        str: A generated comment that is relevant to the submission.
-        
-    Note:
-        If the API call fails, this will return a hardcoded placeholder string.
+        str: The generated comment text
     """
+    logger.info(f"Generating comment for submission {submission.id}")
+    
     try:
-        # Create the context-aware prompt with variations
-        prompt = create_prompt(submission, reddit_instance, variation_count, comment_to_reply)
+        # Use the ResponseGenerator to create a prompt
+        response_generator = ResponseGenerator(reddit_instance)
+        response_data = response_generator.generate_response(
+            submission=submission,
+            comment_to_reply=comment_to_reply,
+            variation_count=variation_count,
+            verbose=verbose
+        )
         
-        # Log the prompt for debugging (but not in production)
-        if os.getenv("DEBUG_MODE", "").lower() == "true" or verbose:
-            logger.debug(f"Generated prompt:\n{prompt}")
+        prompt = response_data["text"]
         
-        # Call the API
-        generated_text = call_openai_api(prompt, verbose)
+        # Call the OpenAI API
+        raw_response = call_openai_api(prompt, verbose)
         
-        # Process and return the response
-        return clean_response(generated_text)
+        # Clean up the response
+        clean_comment = clean_response(raw_response)
+        
+        if verbose:
+            print("\n=== CLEANED COMMENT ===\n")
+            print(clean_comment)
+        
+        return clean_comment
     except Exception as e:
-        logger.error(f"Failed to generate comment: {str(e)}")
-        return "This is a helpful, AI-generated placeholder comment."
+        logger.error(f"Error generating comment: {str(e)}")
+        # Fall back to basic prompt if the pipeline fails
+        basic_prompt = _create_basic_prompt(submission.title, submission.selftext)
+        raw_response = call_openai_api(basic_prompt, verbose)
+        return clean_response(raw_response)
 
 
 def generate_comment(submission_title: str, submission_body: str) -> str:
     """
-    Generate a comment for a Reddit submission using an external LLM.
-    
-    This function takes the title and body of a Reddit submission as context
-    and uses them to generate a relevant, helpful comment using OpenAI's API.
-    
-    This is a legacy method maintained for backward compatibility.
+    Generate a comment for a Reddit submission using just the title and body.
+    This is a simplified version for testing and direct API calls.
     
     Args:
-        submission_title (str): The title of the Reddit submission.
-        submission_body (str): The body/content of the Reddit submission.
+        submission_title (str): The title of the submission
+        submission_body (str): The body/content of the submission
         
     Returns:
-        str: A generated comment that is relevant to the submission.
-        
-    Note:
-        If the API call fails, this will return a hardcoded placeholder string.
-        
-    Example:
-        >>> title = "Need help with Python dictionary"
-        >>> body = "I'm trying to merge two dictionaries but getting errors."
-        >>> comment = generate_comment(title, body)
+        str: The generated comment text
     """
+    logger.info("Generating comment using basic prompt")
+    
     try:
-        # Create the basic prompt
+        # Create a basic prompt
         prompt = _create_basic_prompt(submission_title, submission_body)
         
-        # Call the API
-        generated_text = call_openai_api(prompt)
+        # Call the OpenAI API
+        raw_response = call_openai_api(prompt)
         
-        # Process and return the response
-        return clean_response(generated_text)
+        # Clean up the response
+        clean_comment = clean_response(raw_response)
+        
+        return clean_comment
     except Exception as e:
-        logger.error(f"Failed to generate comment: {str(e)}")
-        return "This is a helpful, AI-generated placeholder comment."
+        logger.error(f"Error generating comment: {str(e)}")
+        return "Sorry, I couldn't generate a response at this time."
 
 
 if __name__ == "__main__":

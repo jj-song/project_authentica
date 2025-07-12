@@ -1,0 +1,42 @@
+{
+  "submission": {
+    "id": "1lu5snp",
+    "title": "Test post for Authentica bot",
+    "body": "This is a test post to see if our OpenAI-powered bot can generate a helpful comment. What do you think about the weather today?",
+    "author": "Slight-Crazy389",
+    "score": 1,
+    "upvote_ratio": 1.0,
+    "created_utc": 1751921786.0,
+    "num_comments": 1,
+    "is_original_content": false,
+    "over_18": false,
+    "permalink": "/r/testingground4bots/comments/1lu5snp/test_post_for_authentica_bot/",
+    "url": "https://www.reddit.com/r/testingground4bots/comments/1lu5snp/test_post_for_authentica_bot/"
+  },
+  "subreddit": {
+    "name": "testingground4bots",
+    "title": "r/testingground4bots - a testing ground for any and all bots",
+    "description": "Come here if you have a bot, or plan on making one, but need a testing ground for posts and comments! This community serves as a sandbox for bot-makers and tinkerers to try out their creations.",
+    "subscribers": 1963,
+    "created_utc": 1389558841.0,
+    "over18": false,
+    "rules": []
+  },
+  "comments": [
+    {
+      "id": "n1vdtrg",
+      "body": "The weather can greatly impact our mood and activities! It's always good to check the forecast to plan your day. Remember to dress appropriately for the conditions and stay hydrated. If it's sunny, consider applying sunscreen to protect your skin. Stay safe and enjoy the day!",
+      "author": "Slight-Crazy389",
+      "score": 1,
+      "created_utc": 1751921797.0,
+      "is_submitter": true
+    }
+  ],
+  "temporal": {
+    "timestamp": 1751930005.66828,
+    "iso_format": "2025-07-07T19:13:25.668280",
+    "day_of_week": "Monday",
+    "hour_of_day": 19,
+    "is_weekend": false
+  }
+}
