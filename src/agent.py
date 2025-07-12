@@ -334,6 +334,126 @@ class KarmaAgent:
         except Exception as e:
             self.logger.error(f"Unexpected error when logging action: {str(e)}")
 
+    def record_comment(self, comment_id: str, submission_id: str, reply_to_id: Optional[str] = None) -> None:
+        """
+        Record a comment in the database after successful posting.
+        
+        Args:
+            comment_id (str): ID of the posted comment
+            submission_id (str): ID of the submission the comment was posted on
+            reply_to_id (Optional[str], optional): ID of the comment being replied to, if any. Defaults to None.
+        """
+        try:
+            # Log the successful comment action
+            self._log_action(
+                action_type="COMMENT_RECORDED",
+                target_id=comment_id,
+                status="SUCCESS",
+                details=f"Comment posted on submission {submission_id}" + (f", reply to {reply_to_id}" if reply_to_id else "")
+            )
+            
+            # Create a record in comment_performance table
+            current_time = datetime.datetime.now().isoformat()
+            cursor = self.db.cursor()
+            
+            # Get the subreddit name from the submission ID if needed
+            subreddit_name = "unknown"  # Default fallback
+            try:
+                submission = self.reddit.submission(id=submission_id)
+                subreddit_name = str(submission.subreddit)
+            except Exception as e:
+                self.logger.error(f"Error getting subreddit name for submission {submission_id}: {str(e)}")
+            
+            # Insert into comment_performance table
+            cursor.execute(
+                """
+                INSERT INTO comment_performance 
+                (comment_id, submission_id, subreddit, initial_score, current_score, last_checked) 
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (comment_id, submission_id, subreddit_name, 1, 1, current_time)
+            )
+            self.db.commit()
+            self.logger.info(f"Recorded comment {comment_id} in database")
+        except Exception as e:
+            self.logger.error(f"Error recording comment {comment_id}: {str(e)}")
+
+    def reply_to_comment(self, comment: Comment, comment_text: str) -> Optional[Comment]:
+        """
+        Reply to a specific comment.
+        
+        Args:
+            comment (Comment): The comment to reply to
+            comment_text (str): The text content for the reply
+            
+        Returns:
+            Optional[Comment]: The posted comment object if successful, None otherwise
+        """
+        try:
+            self.logger.info(f"Attempting to reply to comment {comment.id}")
+            reply = comment.reply(comment_text)
+            
+            # Log the successful reply
+            self.logger.info(f"Successfully replied to comment {comment.id}, reply ID: {reply.id}")
+            self._log_action(
+                action_type="COMMENT_REPLY",
+                target_id=comment.id,
+                status="SUCCESS",
+                details=f"Reply posted with ID {reply.id} on submission {comment.submission.id}"
+            )
+            
+            # Record the comment
+            self.record_comment(reply.id, comment.submission.id, comment.id)
+            
+            return reply
+        except Exception as e:
+            self.logger.error(f"Error replying to comment {comment.id}: {str(e)}")
+            self._log_action(
+                action_type="COMMENT_REPLY",
+                target_id=comment.id,
+                status="FAILURE",
+                details=f"Error: {str(e)}"
+            )
+            return None
+
+    def reply_to_submission(self, submission: Submission, comment_text: str) -> Optional[Comment]:
+        """
+        Reply to a submission with a comment.
+        
+        Args:
+            submission (Submission): The submission to reply to
+            comment_text (str): The text content for the comment
+            
+        Returns:
+            Optional[Comment]: The posted comment object if successful, None otherwise
+        """
+        try:
+            self.logger.info(f"Attempting to comment on submission {submission.id}")
+            comment = submission.reply(comment_text)
+            
+            # Log the successful comment
+            self.logger.info(f"Successfully commented on submission {submission.id}, comment ID: {comment.id}")
+            self._log_action(
+                action_type="COMMENT",
+                target_id=submission.id,
+                status="SUCCESS",
+                details=f"Comment posted with ID {comment.id}"
+            )
+            
+            # Record the comment
+            self.record_comment(comment.id, submission.id)
+            
+            return comment
+        except Exception as e:
+            self.logger.error(f"Error commenting on submission {submission.id}: {str(e)}")
+            self._log_action(
+                action_type="COMMENT",
+                target_id=submission.id,
+                status="FAILURE",
+                details=f"Error: {str(e)}"
+            )
+            return None
+
 
 if __name__ == "__main__":
     # Example usage (for demonstration purposes only)

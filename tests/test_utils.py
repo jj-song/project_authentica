@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Unit tests for the utility functions in src/utils.py
+Unit tests for the utility functions in src/utils/reddit_utils.py
 """
 
 import pytest
 import requests
 from requests.exceptions import RequestException, Timeout, ConnectionError
-from src.utils import check_shadowban
+from src.utils.reddit_utils import check_shadowban_by_username as check_shadowban
 
 
 class TestCheckShadowban:
-    """Test suite for the check_shadowban function."""
+    """Test suite for the check_shadowban_by_username function."""
     
     def test_check_shadowban_is_banned(self, mocker):
         """
