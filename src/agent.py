@@ -378,6 +378,82 @@ class KarmaAgent:
         except Exception as e:
             self.logger.error(f"Error recording comment {comment_id}: {str(e)}")
 
+    def reply_to_comment(self, comment: Comment, comment_text: str) -> Optional[Comment]:
+        """
+        Reply to a specific comment.
+        
+        Args:
+            comment (Comment): The comment to reply to
+            comment_text (str): The text content for the reply
+            
+        Returns:
+            Optional[Comment]: The posted comment object if successful, None otherwise
+        """
+        try:
+            self.logger.info(f"Attempting to reply to comment {comment.id}")
+            reply = comment.reply(comment_text)
+            
+            # Log the successful reply
+            self.logger.info(f"Successfully replied to comment {comment.id}, reply ID: {reply.id}")
+            self._log_action(
+                action_type="COMMENT_REPLY",
+                target_id=comment.id,
+                status="SUCCESS",
+                details=f"Reply posted with ID {reply.id} on submission {comment.submission.id}"
+            )
+            
+            # Record the comment
+            self.record_comment(reply.id, comment.submission.id, comment.id)
+            
+            return reply
+        except Exception as e:
+            self.logger.error(f"Error replying to comment {comment.id}: {str(e)}")
+            self._log_action(
+                action_type="COMMENT_REPLY",
+                target_id=comment.id,
+                status="FAILURE",
+                details=f"Error: {str(e)}"
+            )
+            return None
+
+    def reply_to_submission(self, submission: Submission, comment_text: str) -> Optional[Comment]:
+        """
+        Reply to a submission with a comment.
+        
+        Args:
+            submission (Submission): The submission to reply to
+            comment_text (str): The text content for the comment
+            
+        Returns:
+            Optional[Comment]: The posted comment object if successful, None otherwise
+        """
+        try:
+            self.logger.info(f"Attempting to comment on submission {submission.id}")
+            comment = submission.reply(comment_text)
+            
+            # Log the successful comment
+            self.logger.info(f"Successfully commented on submission {submission.id}, comment ID: {comment.id}")
+            self._log_action(
+                action_type="COMMENT",
+                target_id=submission.id,
+                status="SUCCESS",
+                details=f"Comment posted with ID {comment.id}"
+            )
+            
+            # Record the comment
+            self.record_comment(comment.id, submission.id)
+            
+            return comment
+        except Exception as e:
+            self.logger.error(f"Error commenting on submission {submission.id}: {str(e)}")
+            self._log_action(
+                action_type="COMMENT",
+                target_id=submission.id,
+                status="FAILURE",
+                details=f"Error: {str(e)}"
+            )
+            return None
+
 
 if __name__ == "__main__":
     # Example usage (for demonstration purposes only)
