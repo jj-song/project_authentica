@@ -10,7 +10,6 @@ import logging
 import json
 from typing import Optional, Dict, Any, Union, List
 
-from dotenv import load_dotenv
 from openai import OpenAI
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 import praw
@@ -19,9 +18,7 @@ from praw.models import Submission, Comment
 from src.context.collector import ContextCollector
 from src.context.templates import TemplateSelector
 from src.database import get_db_connection
-
-# Load environment variables
-load_dotenv()
+from src.config import init_configuration
 
 # Configure logging
 logging.basicConfig(
@@ -30,16 +27,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Default values if environment variables are not set
-DEFAULT_MODEL = "gpt-3.5-turbo"
-DEFAULT_TEMPERATURE = 0.7
-DEFAULT_MAX_TOKENS = 250
+# Get configuration
+config = init_configuration()
 
-# Get configuration from environment variables
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-LLM_MODEL = os.getenv("LLM_MODEL", DEFAULT_MODEL)
-LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", DEFAULT_TEMPERATURE))
-LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", DEFAULT_MAX_TOKENS))
+# Get OpenAI configuration
+OPENAI_API_KEY = config["openai"]["api_key"]
+LLM_MODEL = config["openai"]["model"]
+LLM_TEMPERATURE = config["openai"]["temperature"]
+LLM_MAX_TOKENS = config["openai"]["max_tokens"]
 
 
 def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2, comment_to_reply: Optional[Comment] = None) -> str:
@@ -61,7 +56,7 @@ def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variatio
         context = collector.collect_context(submission)
         
         # If thread analysis is enabled, perform advanced analysis
-        if os.getenv("ENABLE_THREAD_ANALYSIS", "").lower() == "true":
+        if config["features"]["thread_analysis"]:
             try:
                 from src.thread_analysis.analyzer import ThreadAnalyzer
                 from src.thread_analysis.strategies import ResponseStrategy
@@ -97,7 +92,7 @@ def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variatio
         base_prompt = selector.generate_with_variations(context, variation_count, comment_to_reply)
         
         # If humanization is enabled, enhance the prompt with human-like examples and guidelines
-        if os.getenv("ENABLE_HUMANIZATION", "").lower() == "true":
+        if config["features"]["humanization"]:
             try:
                 from src.humanization.sampler import CommentSampler
                 from src.humanization.prompt_enhancer import enhance_prompt

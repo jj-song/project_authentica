@@ -1,0 +1,15 @@
+# Example praw.ini file
+# Copy this to praw.ini and fill in your Reddit API credentials
+
+[my_first_bot]
+client_id=YOUR_CLIENT_ID
+client_secret=YOUR_CLIENT_SECRET
+username=YOUR_REDDIT_USERNAME
+password=YOUR_REDDIT_PASSWORD
+user_agent=python:project_authentica:v1.0 (by /u/YOUR_REDDIT_USERNAME)
+
+# You can add additional bot configurations by creating new sections
+# [another_bot]
+# client_id=ANOTHER_CLIENT_ID
+# client_secret=ANOTHER_CLIENT_SECRET
+# ... 

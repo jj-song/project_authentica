@@ -20,7 +20,7 @@ import praw
 from praw.exceptions import PRAWException, APIException, ClientException
 
 from src.database import get_db_connection, initialize_database
-from src.config import get_reddit_instance
+from src.config import get_reddit_instance, init_configuration
 from src.agent import KarmaAgent
 from src.context.collector import ContextCollector
 from src.context.templates import TemplateSelector, VariationEngine
@@ -28,13 +28,12 @@ from src.llm_handler import generate_comment_from_submission
 from src.thread_analysis.analyzer import ThreadAnalyzer
 from src.thread_analysis.strategies import ResponseStrategy
 
+# Get configuration
+config = init_configuration()
 
 # Bot configuration
-BOT_USERNAME = "my_first_bot"
+BOT_USERNAME = config["runtime"]["bot_username"]
 TARGET_SUBREDDITS = ['SkincareAddiction', 'testingground4bots', 'formula1']
-
-# Enable thread analysis by default
-os.environ["ENABLE_THREAD_ANALYSIS"] = "true"
 
 
 def parse_arguments():
@@ -198,62 +197,45 @@ def run_once(subreddit_name, post_limit=10, sort='hot', verbose=False):
         # Determine which comment to reply to
         target_comment = None
         if response_strategy.get('target_comment'):
-            # Find the actual comment object in the submission
+            # Find the comment in the submission
             for comment in selected_post.comments.list():
-                if hasattr(comment, "id") and comment.id == response_strategy['target_comment'].get('id'):
+                if hasattr(comment, "id") and comment.id == response_strategy['target_comment'].get("id"):
                     target_comment = comment
                     break
         
-        # Post a comment
-        logger.info(f"\n=== POSTING COMMENT ===\n")
-        if target_comment:
-            logger.info(f"Replying to comment by {target_comment.author}: {target_comment.body[:100]}...")
-            logger.info(f"Comment score: {target_comment.score}")
-        else:
-            logger.info(f"Posting a top-level comment on '{selected_post.title}'")
+        # Generate a comment
+        logger.info("Generating comment...")
+        comment_text = generate_comment_from_submission(
+            selected_post, 
+            reddit, 
+            variation_count=2, 
+            comment_to_reply=target_comment,
+            verbose=verbose
+        )
         
-        # Generate and post the comment
-        try:
-            # Get the comment content
-            comment_content = generate_comment_from_submission(
-                selected_post,
-                reddit,
-                variation_count=2,
-                comment_to_reply=target_comment,
-                verbose=verbose
-            )
-            
-            # Post the comment
-            if not os.environ.get('DRY_RUN', False):
-                try:
-                    if target_comment:
-                        reply = target_comment.reply(comment_content)
-                    else:
-                        reply = selected_post.reply(comment_content)
-                    
-                    logger.info(f"Reply posted successfully! Comment ID: {reply.id}")
-                    logger.info(f"View at: {reply.permalink}")
-                    
-                    # Record the comment in the database
-                    karma_agent.record_comment(reply.id, selected_post.id, target_comment.id if target_comment else None)
-                except praw.exceptions.RedditAPIException as e:
-                    logger.error(f"Error posting comment: {str(e)}")
-                    print(f"Error posting comment: {str(e)}")
+        # Post the comment
+        if not config["runtime"]["dry_run"]:
+            logger.info("Posting comment...")
+            if target_comment:
+                logger.info(f"Replying to comment by u/{target_comment.author}")
+                karma_agent.reply_to_comment(target_comment, comment_text)
             else:
-                logger.info("DRY RUN: Comment not posted")
-                logger.info(f"Generated Reply:\n{comment_content}")
-        except Exception as e:
-            logger.error(f"Error generating or posting comment: {str(e)}")
-            raise
+                logger.info("Replying to submission")
+                karma_agent.reply_to_submission(selected_post, comment_text)
+            logger.info("Comment posted successfully!")
+        else:
+            logger.info("DRY RUN: Comment not posted")
+            print("\n=== GENERATED COMMENT ===\n")
+            print(comment_text)
         
-        logger.info("One-time run completed successfully")
+        logger.info("Run completed successfully!")
+        
     except Exception as e:
-        logger.error(f"Error in one-time run: {str(e)}")
-        raise
+        logger.error(f"Error: {str(e)}")
     finally:
         # Close database connection
-        logger.info("Closing database connection...")
-        if db_conn:
+        if 'db_conn' in locals():
+            logger.info("Closing database connection...")
             db_conn.close()
 
 
@@ -466,7 +448,7 @@ def show_submission_context(submission_id, verbose=False):
             print(f"Variation {i}: {variation}")
         
         # If thread analysis is enabled, show the analysis results
-        if os.environ.get("ENABLE_THREAD_ANALYSIS", "").lower() == "true" and verbose:
+        if config["features"]["thread_analysis"] and verbose:
             print(f"\n=== THREAD ANALYSIS ===\n")
             thread_analyzer = ThreadAnalyzer(reddit)
             thread_analysis = thread_analyzer.analyze_thread(submission)
@@ -552,7 +534,7 @@ def main():
     logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger("Authentica")
     
-    # Set environment variables based on arguments
+    # Update configuration based on arguments
     if args.dry_run:
         os.environ["DRY_RUN"] = "true"
     
