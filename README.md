@@ -34,10 +34,19 @@ project_authentica/
 │   ├── database.py         # Database handling
 │   ├── llm_handler.py      # OpenAI API integration
 │   ├── main.py             # Main entry point with scheduler
-│   ├── utils.py            # Utility functions
+│   ├── response_generator.py # Response generation orchestration
+│   ├── utils/              # Utility functions
+│   │   ├── database_utils.py # Database operations
+│   │   ├── error_utils.py  # Error handling and exceptions
+│   │   ├── logging_utils.py # Logging configuration
+│   │   └── reddit_utils.py # Reddit API operations
 │   ├── context/            # Context collection and templates
 │   │   ├── collector.py    # Gathers context from Reddit
 │   │   └── templates.py    # Prompt templates and variations
+│   ├── humanization/       # Human-like response generation
+│   │   ├── analyzer.py     # Analyzes text for humanization
+│   │   ├── prompt_enhancer.py # Enhances prompts for human-like responses
+│   │   └── sampler.py      # Samples different response styles
 │   └── thread_analysis/    # Thread analysis components
 │       ├── analyzer.py     # Thread structure analysis
 │       ├── conversation.py # Conversation flow analysis
@@ -74,6 +83,12 @@ project_authentica/
 - Conversation flow understanding with pattern detection
 - Adaptive response strategies based on thread characteristics
 - Integration with the existing prompt engineering system
+
+### Phase 5: Code Structure Improvements
+- Modular utility functions with clear separation of concerns
+- Enhanced error handling and logging
+- Improved database operations with connection pooling
+- Standardized interfaces and method signatures
 
 ## Detailed Features
 
@@ -217,6 +232,24 @@ password=your_reddit_password
 
 ## Development
 
+### Using Utility Modules
+
+The project now uses specialized utility modules for common operations:
+
+```python
+# Database operations
+from src.utils.database_utils import get_db_connection, execute_query
+
+# Error handling
+from src.utils.error_utils import handle_exceptions, RedditAPIError
+
+# Logging configuration
+from src.utils.logging_utils import get_component_logger
+
+# Reddit API operations
+from src.utils.reddit_utils import check_shadowban, get_comment_by_id
+```
+
 ### Adding New Templates
 
 Create a new class in `src/context/templates.py` that inherits from `PromptTemplate`:
@@ -280,6 +313,7 @@ pytest tests/test_agent.py
 - ✅ Advanced thread analysis
 - ✅ Multiple response strategies
 - ✅ Template system with variations
+- ✅ Code structure cleanup and modularization
 
 ### In Progress
 - 🔄 Human-like response improvements

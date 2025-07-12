@@ -6,7 +6,7 @@ Project Authentica is a Reddit bot system that posts AI-generated comments. The 
 
 ## System Components
 
-### 1. Database Management (`src/database.py`)
+### 1. Database Management (`src/database.py` and `src/utils/database_utils.py`)
 
 The database component handles all database interactions using SQLite. It maintains three main tables:
 - `bots`: Stores information about registered bots
@@ -14,10 +14,16 @@ The database component handles all database interactions using SQLite. It mainta
 - `comment_performance`: Tracks the performance of posted comments
 
 **Current TODOs:**
-- Implement comment performance tracking functionality
+- ✅ Implement comment performance tracking functionality
 - Add database migration capabilities for schema updates
 - Implement database backup functionality
 - Add query functions for analytics and reporting
+
+**Completed Improvements:**
+- ✅ Fixed foreign key constraint failures with `ensure_bot_registered`
+- ✅ Added `DatabaseManager` class with connection pooling
+- ✅ Standardized database operations with proper error handling
+- ✅ Added transaction management
 
 ### 2. Configuration Management (`src/config.py`)
 
@@ -29,74 +35,104 @@ The configuration component handles Reddit API authentication via praw.ini and e
 - Create a configuration UI or CLI tool
 - Implement secure credential rotation
 
-### 3. Utility Functions (`src/utils.py`)
+### 3. Utility Functions (`src/utils/`)
 
-Contains utility functions like `check_shadowban` to verify bot account status.
+Utility functions have been refactored into specialized modules:
+- `database_utils.py`: Centralized database operations
+- `reddit_utils.py`: Reddit API operations including `check_shadowban`
+- `error_utils.py`: Standardized error handling and custom exceptions
+- `logging_utils.py`: Centralized logging configuration
 
 **Current TODOs:**
-- Expand utility functions for common operations
-- Add comprehensive error handling
-- Implement logging utilities
 - Add rate limiting and throttling utilities
+- Implement additional Reddit API utilities
+- Add caching mechanisms for API responses
+
+**Completed Improvements:**
+- ✅ Expanded utility functions for common operations
+- ✅ Added comprehensive error handling
+- ✅ Implemented logging utilities
+- ✅ Standardized method signatures and return types
 
 ### 4. LLM Handler (`src/llm_handler.py`)
 
 Manages interactions with OpenAI's API to generate comments.
 
 **Current TODOs:**
-- Implement prompt engineering for better responses
 - Add support for different LLM providers (Claude, Llama, etc.)
 - Implement caching for similar prompts
 - Add content filtering and safety measures
 - Optimize token usage
+
+**Completed Improvements:**
+- ✅ Implemented prompt engineering for better responses
+- ✅ Added context-aware comment generation
 
 ### 5. Agent (`src/agent.py`)
 
 The KarmaAgent class manages Reddit interactions, including scanning subreddits, posting comments, and logging actions.
 
 **Current TODOs:**
-- Implement post relevance detection algorithm
-- Add comment performance tracking
 - Implement adaptive posting strategies
-- Add support for comment replies
 - Implement anti-detection measures
 
-### 6. Main Application (`src/main.py`)
+**Completed Improvements:**
+- ✅ Implemented post relevance detection algorithm
+- ✅ Added comment performance tracking
+- ✅ Added support for comment replies
+- ✅ Improved error handling with custom exceptions
+- ✅ Standardized method signatures and return types
+
+### 6. Response Generator (`src/response_generator.py`)
+
+New component that orchestrates the response generation workflow.
+
+**Features:**
+- Implements pipeline pattern with clear stages
+- Provides proper validation between stages
+- Streamlines the workflow from context collection to response generation
+
+### 7. Main Application (`src/main.py`)
 
 The entry point for the application with scheduler setup.
 
 **Current TODOs:**
-- Implement proper shutdown handling
-- Add command-line interface
 - Implement monitoring and alerting
 - Add dashboard for real-time status
 
-### 7. Testing Framework
+**Completed Improvements:**
+- ✅ Implemented proper shutdown handling
+- ✅ Added comprehensive command-line interface
+
+### 8. Testing Framework
 
 Includes test files for various components.
 
 **Current TODOs:**
-- Expand test coverage
-- Implement integration tests
 - Add performance benchmarks
 - Create a CI/CD pipeline
+
+**Completed Improvements:**
+- ✅ Expanded test coverage
+- ✅ Implemented integration tests
+- ✅ Added proper mocking for Reddit API and OpenAI API
 
 ## Prioritized User Stories / Issues
 
 ### High Priority (P0)
 
-1. **Post Relevance Detection**
+1. **Post Relevance Detection** ✅
    - As a bot operator, I want the bot to intelligently select which posts to comment on, so that it maximizes engagement and avoids wasting resources on irrelevant posts.
    - Tasks:
-     - Implement post filtering based on content analysis
-     - Add scoring algorithm for post relevance
-     - Create configurable relevance thresholds
+     - ✅ Implement post filtering based on content analysis
+     - ✅ Add scoring algorithm for post relevance
+     - ✅ Create configurable relevance thresholds
 
-2. **Comment Performance Tracking**
+2. **Comment Performance Tracking** ✅
    - As a bot operator, I want to track how well each comment performs, so I can optimize the bot's commenting strategy.
    - Tasks:
-     - Implement periodic checking of comment karma
-     - Add performance metrics to database
+     - ✅ Implement periodic checking of comment karma
+     - ✅ Add performance metrics to database
      - Create performance reports
 
 3. **Content Safety Measures**
@@ -115,11 +151,11 @@ Includes test files for various components.
      - Add subreddit analysis tools
      - Create subreddit performance comparisons
 
-5. **Advanced Prompt Engineering**
+5. **Advanced Prompt Engineering** ✅
    - As a bot operator, I want to fine-tune the prompts sent to the LLM, to generate more relevant and engaging comments.
    - Tasks:
-     - Create template system for prompts
-     - Implement dynamic prompt construction
+     - ✅ Create template system for prompts
+     - ✅ Implement dynamic prompt construction
      - Add A/B testing for prompt effectiveness
 
 6. **Alternative LLM Provider Support**
@@ -138,12 +174,12 @@ Includes test files for various components.
 
 ### Lower Priority (P2)
 
-8. **Comment Reply Handling**
+8. **Comment Reply Handling** ✅
    - As a bot operator, I want the bot to respond to replies to its comments, to increase engagement and appear more human-like.
    - Tasks:
-     - Implement reply detection
-     - Add context-aware response generation
-     - Create conversation threading logic
+     - ✅ Implement reply detection
+     - ✅ Add context-aware response generation
+     - ✅ Create conversation threading logic
 
 9. **Database Migration & Backup**
    - As a bot operator, I want automated database backups and smooth schema migrations, to ensure data integrity and easy updates.
@@ -175,19 +211,19 @@ Includes test files for various components.
 
 ## Implementation Roadmap
 
-1. **Phase 1: Core Functionality Enhancements**
-   - Implement Post Relevance Detection (P0)
-   - Add Comment Performance Tracking (P0)
+1. **Phase 1: Core Functionality Enhancements** ✅
+   - ✅ Implement Post Relevance Detection (P0)
+   - ✅ Add Comment Performance Tracking (P0)
    - Implement Content Safety Measures (P0)
 
-2. **Phase 2: Platform Extensions**
+2. **Phase 2: Platform Extensions** 🔄
    - Add Multi-Subreddit Support (P1)
-   - Implement Advanced Prompt Engineering (P1)
+   - ✅ Implement Advanced Prompt Engineering (P1)
    - Add Alternative LLM Provider Support (P1)
 
-3. **Phase 3: Operational Improvements**
+3. **Phase 3: Operational Improvements** 🔄
    - Create Dashboard & Monitoring (P1)
-   - Implement Comment Reply Handling (P2)
+   - ✅ Implement Comment Reply Handling (P2)
    - Add Database Migration & Backup (P2)
 
 4. **Phase 4: Advanced Features**
@@ -195,10 +231,25 @@ Includes test files for various components.
    - Add Anti-Detection Measures (P2)
    - Create Multi-Bot Orchestration (P2)
 
+5. **Phase 5: Code Structure Improvements** ✅
+   - ✅ Modular utility functions with clear separation of concerns
+   - ✅ Enhanced error handling and logging
+   - ✅ Improved database operations with connection pooling
+   - ✅ Standardized interfaces and method signatures
+
 ## Technical Debt and Refactoring
 
-- Improve error handling throughout the codebase
-- Enhance logging for better debugging
-- Refactor code for better modularity
+- ✅ Improve error handling throughout the codebase
+- ✅ Enhance logging for better debugging
+- ✅ Refactor code for better modularity
 - Optimize database queries for performance
-- Implement comprehensive documentation
+- ✅ Implement comprehensive documentation
+
+## New Technical Debt Items
+
+- Refactor the main.py file to use the ResponseGenerator class consistently
+- Add type hints to all functions for better IDE support
+- Create a unified configuration system that combines environment variables and praw.ini
+- Implement proper unit tests for the utility modules
+- Add integration tests for end-to-end workflows
+- Implement a proper CI/CD pipeline with GitHub Actions
