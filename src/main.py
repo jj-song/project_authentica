@@ -22,6 +22,8 @@ from src.agent import KarmaAgent
 from src.context.collector import ContextCollector
 from src.context.templates import TemplateSelector, VariationEngine
 from src.llm_handler import generate_comment_from_submission
+from src.thread_analysis.analyzer import ThreadAnalyzer
+from src.thread_analysis.strategies import ResponseStrategy
 
 
 # Bot configuration
@@ -46,7 +48,8 @@ def run_once(subreddit_name, post_limit=10, verbose=False):
     
     # Initialize database
     logger.info("Initializing database...")
-    db_conn = init_db()
+    initialize_database()
+    db_conn = get_db_connection()
     logger.info("Database connection established")
     
     try:
@@ -94,43 +97,48 @@ def run_once(subreddit_name, post_limit=10, verbose=False):
         logger.info(f"Selected post: '{selected_post.title}'")
         
         # Collect context
-        context = collect_context(selected_post)
+        collector = ContextCollector(reddit)
+        context = collector.collect_context(selected_post)
         
         # Analyze the thread
         thread_analyzer = ThreadAnalyzer(reddit)
         thread_analysis = thread_analyzer.analyze_thread(selected_post)
-        
+
         # Determine response strategy
-        strategy_selector = ResponseStrategySelector(thread_analysis)
-        response_strategy = strategy_selector.select_strategy()
-        
+        strategy = ResponseStrategy()
+        response_strategy = strategy.determine_strategy(thread_analysis, context)
+
         # Select a template
         template_selector = TemplateSelector()
         template = template_selector.select_template(response_strategy, context)
-        
+
         # Select variations
-        variations = template_selector.select_variations(2)  # Select 2 random variations
-        
+        variations = VariationEngine.get_random_variations(2)  # Select 2 random variations
+
         # Log the selected strategy and template
         logger.info(f"\n=== SELECTED RESPONSE STRATEGY ===\n")
-        logger.info(f"Strategy type: {response_strategy.strategy_type}")
-        logger.info(f"Reasoning: {response_strategy.reasoning}")
-        if hasattr(response_strategy, 'target_comment') and response_strategy.target_comment:
-            logger.info(f"Target comment: {response_strategy.target_comment.id} by {response_strategy.target_comment.author}")
-        elif hasattr(response_strategy, 'target') and response_strategy.target:
-            logger.info(f"Target: {response_strategy.target}")
-        
+        logger.info(f"Strategy type: {response_strategy['type']}")
+        logger.info(f"Reasoning: {response_strategy['reasoning']}")
+        if response_strategy.get('target_comment'):
+            logger.info(f"Target comment: {response_strategy['target_comment'].get('id')} by {response_strategy['target_comment'].get('author')}")
+        elif response_strategy.get('target'):
+            logger.info(f"Target: {response_strategy['target']}")
+
         logger.info(f"\n=== TEMPLATE SELECTION ===\n")
         logger.info(f"Selected Template: {template.__class__.__name__}")
-        
+
         logger.info(f"\n=== SELECTED VARIATIONS ===\n")
         for i, variation in enumerate(variations, 1):
             logger.info(f"Variation {i}: {variation}")
         
         # Determine which comment to reply to
         target_comment = None
-        if hasattr(response_strategy, 'target_comment') and response_strategy.target_comment:
-            target_comment = response_strategy.target_comment
+        if response_strategy.get('target_comment'):
+            # Find the actual comment object in the submission
+            for comment in selected_post.comments.list():
+                if hasattr(comment, "id") and comment.id == response_strategy['target_comment'].get('id'):
+                    target_comment = comment
+                    break
         
         # Post a comment
         logger.info(f"\n=== POSTING COMMENT ===\n")
@@ -142,18 +150,12 @@ def run_once(subreddit_name, post_limit=10, verbose=False):
         
         # Generate and post the comment
         try:
-            llm_handler = LLMHandler()
-            
             # Get the comment content
-            comment_content = llm_handler.generate_response(
+            comment_content = generate_comment_from_submission(
                 selected_post,
-                target_comment,
-                response_strategy,
-                template,
-                variations,
-                context,
                 reddit,
-                db_conn,
+                variation_count=2,
+                comment_to_reply=target_comment,
                 verbose=verbose
             )
             

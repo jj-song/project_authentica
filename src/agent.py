@@ -334,6 +334,50 @@ class KarmaAgent:
         except Exception as e:
             self.logger.error(f"Unexpected error when logging action: {str(e)}")
 
+    def record_comment(self, comment_id: str, submission_id: str, reply_to_id: Optional[str] = None) -> None:
+        """
+        Record a comment in the database after successful posting.
+        
+        Args:
+            comment_id (str): ID of the posted comment
+            submission_id (str): ID of the submission the comment was posted on
+            reply_to_id (Optional[str], optional): ID of the comment being replied to, if any. Defaults to None.
+        """
+        try:
+            # Log the successful comment action
+            self._log_action(
+                action_type="COMMENT_RECORDED",
+                target_id=comment_id,
+                status="SUCCESS",
+                details=f"Comment posted on submission {submission_id}" + (f", reply to {reply_to_id}" if reply_to_id else "")
+            )
+            
+            # Create a record in comment_performance table
+            current_time = datetime.datetime.now().isoformat()
+            cursor = self.db.cursor()
+            
+            # Get the subreddit name from the submission ID if needed
+            subreddit_name = "unknown"  # Default fallback
+            try:
+                submission = self.reddit.submission(id=submission_id)
+                subreddit_name = str(submission.subreddit)
+            except Exception as e:
+                self.logger.error(f"Error getting subreddit name for submission {submission_id}: {str(e)}")
+            
+            # Insert into comment_performance table
+            cursor.execute(
+                """
+                INSERT INTO comment_performance 
+                (comment_id, submission_id, subreddit, initial_score, current_score, last_checked) 
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (comment_id, submission_id, subreddit_name, 1, 1, current_time)
+            )
+            self.db.commit()
+            self.logger.info(f"Recorded comment {comment_id} in database")
+        except Exception as e:
+            self.logger.error(f"Error recording comment {comment_id}: {str(e)}")
+
 
 if __name__ == "__main__":
     # Example usage (for demonstration purposes only)
