@@ -1,45 +1,49 @@
 # Project Authentica Scripts
 
-This directory contains utility scripts for testing and running the Project Authentica bot.
+This directory previously contained utility scripts for testing and running the Project Authentica bot. These scripts have now been consolidated into the main CLI interface in `src/main.py` to reduce redundancy and provide a more consistent user experience.
 
-## Scripts Overview
+## Using the CLI Interface
 
-### `test_bot_run.py`
-A script to test the bot with OpenAI integration on the testingground4bots subreddit. It:
-- Authenticates with Reddit
-- Initializes the database connection
-- Creates a KarmaAgent
-- Scans for posts and comments on them
-- Uses the 'new' sort to find recent posts
-
-### `test_run.py`
-A simple test script to run the bot without the scheduler. It:
-- Sets up the environment
-- Initializes the database
-- Creates a KarmaAgent
-- Performs a single scan
-
-### `test_openai.py`
-A script to test the OpenAI integration. It:
-- Tests the comment generation using OpenAI's API
-- Displays the generated comment
-- Does not post to Reddit
-
-### `check_comment.py`
-A utility script to check comments made by the bot on a specific post. It:
-- Fetches a post by ID
-- Displays the post title and body
-- Lists all comments on the post with their authors
-
-## Usage
-
-To run any script, use:
+All functionality that was previously available through separate scripts is now accessible through the comprehensive CLI:
 
 ```bash
-python scripts/<script_name>.py
+# Run the bot once without scheduling
+python -m src.main --once --subreddit AskReddit --limit 1
+
+# View comments on a specific post
+python -m src.main --view-comments SUBMISSION_ID
+
+# Show context collected for a specific submission
+python -m src.main --show-context SUBMISSION_ID
+
+# Check status and performance of a specific comment
+python -m src.main --check-comment COMMENT_ID --verbose
 ```
 
-For example:
+## Remaining Test Scripts
+
+### `test_bot_run.py` and `test_run.py`
+Test scripts for running the bot without the scheduler. This functionality is now available with:
 ```bash
-python scripts/test_bot_run.py
+python -m src.main --once
+```
+
+### `test_openai.py`
+Tests the OpenAI integration. Similar functionality can be achieved with:
+```bash
+python -m src.main --once --dry-run --verbose
+```
+
+### `test_thread_analysis.py`
+Tests the thread analysis functionality. Similar information can be viewed with:
+```bash
+python -m src.main --show-context SUBMISSION_ID --verbose
+```
+
+## Further Documentation
+
+For a complete overview of all available CLI options, please see the README.md or run:
+
+```bash
+python -m src.main --help
 ```

@@ -43,10 +43,6 @@ project_authentica/
 │       ├── conversation.py # Conversation flow analysis
 │       └── strategies.py   # Response strategy determination
 ├── scripts/                # Utility scripts
-│   ├── run_once.py         # Run the bot once without scheduler
-│   ├── test_thread_analysis.py # Test thread analysis features
-│   ├── show_context.py     # Display context collection results
-│   └── view_comment.py     # View generated comments
 ├── docs/                   # Documentation
 │   ├── scope.md            # Project scope document
 │   └── testing_plan.md     # Testing strategy and plan
@@ -140,24 +136,57 @@ cp env.example .env
 
 ### Running the Bot
 
-#### With Scheduler (continuous operation)
+Project Authentica provides a comprehensive command-line interface for all operations.
+
+#### Basic Usage
+
 ```bash
-python -m src.main
+# Run the bot once without scheduling
+python -m src.main --once --subreddit AskReddit --limit 1
+
+# Run with scheduler
+python -m src.main --schedule --subreddit formula1 --interval 45
 ```
 
-#### One-time Execution
+#### Available Commands and Options
+
+##### Operation Modes
+- `--once`: Run the bot once without scheduling
+- `--schedule`: Run the bot with the scheduler (default)
+
+##### Target Parameters
+- `--subreddit`, `-s`: Subreddit to scan (default: formula1)
+- `--limit`, `-l`: Maximum number of posts to process (default: 1)
+- `--sort`: Sort method for posts (choices: hot, new, top, rising; default: hot)
+
+##### Scheduler Options
+- `--interval`: Minutes between scheduled runs (default: 30)
+- `--jitter`: Random jitter in minutes to add to interval (default: 5)
+
+##### Utility Functions
+- `--check-comment COMMENT_ID`: Check status and performance of a specific comment
+- `--show-context SUBMISSION_ID`: Show context collected for a specific submission
+- `--view-comments SUBMISSION_ID`: View comments on a specific submission
+
+##### Debug Options
+- `--dry-run`: Generate but do not post comments
+- `--verbose`, `-v`: Enable verbose output
+- `--debug`: Enable debug mode with additional logging
+
+#### Examples
+
 ```bash
-# Using main.py with --once flag
-python -m src.main --once [subreddit] [post_limit] [verbose]
+# Check the performance of a specific comment
+python -m src.main --check-comment n2qwmuo --verbose
 
-# Example: 
-python -m src.main --once formula1 1 true
+# Show the context collected for a submission
+python -m src.main --show-context 1ly07mf
 
-# Using the wrapper script
-python scripts/run_once.py --subreddit [name] --limit [num] [--quiet]
+# Generate a comment but don't post it (dry run)
+python -m src.main --once --subreddit askscience --dry-run --verbose
 
-# Example:
-python scripts/run_once.py --subreddit formula1 --limit 1
+# Run the bot with scheduler, checking every 45 minutes
+python -m src.main --schedule --subreddit formula1 --interval 45 --jitter 10
 ```
 
 ## Configuration
@@ -165,7 +194,7 @@ python scripts/run_once.py --subreddit formula1 --limit 1
 Create a `.env` file with the following variables:
 ```
 # OpenAI API Configuration
-OPENAI_API_KEY=your_openai_api_key
+OPENAI_API_KEY=your_openai_api_key_here
 
 # LLM Settings
 LLM_MODEL=gpt-3.5-turbo
