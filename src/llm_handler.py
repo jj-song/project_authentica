@@ -110,7 +110,7 @@ def create_prompt(submission: Submission, reddit_instance: praw.Reddit, variatio
                 subreddit_name = str(submission.subreddit)
                 
                 # Get representative samples and subreddit profile
-                samples = sampler.get_representative_samples(subreddit_name, context, count=3)
+                samples = sampler.get_representative_samples(subreddit_name, context, count=5)
                 profile = sampler.get_subreddit_profile(subreddit_name)
                 
                 # Enhance the prompt with humanization
@@ -164,12 +164,13 @@ def _create_basic_prompt(title: str, body: str) -> str:
     stop=stop_after_attempt(3),
     retry=retry_if_exception_type((TimeoutError, ConnectionError))
 )
-def call_openai_api(prompt: str) -> str:
+def call_openai_api(prompt: str, verbose: bool = False) -> str:
     """
     Make the API call to OpenAI with retry logic.
     
     Args:
         prompt (str): The formatted prompt to send to the API
+        verbose (bool): Whether to print detailed information
         
     Returns:
         str: The generated text response
@@ -180,6 +181,10 @@ def call_openai_api(prompt: str) -> str:
     if not OPENAI_API_KEY:
         logger.warning("OpenAI API key not found. Using placeholder response.")
         return "This is a helpful, AI-generated placeholder comment."
+    
+    if verbose:
+        print("\n=== PROMPT SENT TO LLM ===\n")
+        print(prompt)
     
     try:
         # Initialize OpenAI client
@@ -198,7 +203,13 @@ def call_openai_api(prompt: str) -> str:
         )
         
         # Extract the generated text
-        return response.choices[0].message.content.strip()
+        generated_text = response.choices[0].message.content.strip()
+        
+        if verbose:
+            print("\n=== LLM RESPONSE ===\n")
+            print(generated_text)
+            
+        return generated_text
     except Exception as e:
         logger.error(f"OpenAI API error: {str(e)}")
         raise
@@ -224,7 +235,7 @@ def clean_response(text: str) -> str:
     return text
 
 
-def generate_comment_from_submission(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2, comment_to_reply: Optional[Comment] = None) -> str:
+def generate_comment_from_submission(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2, comment_to_reply: Optional[Comment] = None, verbose: bool = False) -> str:
     """
     Generate a comment for a Reddit submission using an external LLM with context-aware prompting.
     
@@ -236,6 +247,7 @@ def generate_comment_from_submission(submission: Submission, reddit_instance: pr
         reddit_instance (praw.Reddit): Authenticated Reddit instance for context collection.
         variation_count (int): Number of variations to apply to the prompt.
         comment_to_reply (Optional[Comment]): If provided, generate a reply to this comment instead of the submission.
+        verbose (bool): Whether to print detailed information about the process.
         
     Returns:
         str: A generated comment that is relevant to the submission.
@@ -248,11 +260,11 @@ def generate_comment_from_submission(submission: Submission, reddit_instance: pr
         prompt = create_prompt(submission, reddit_instance, variation_count, comment_to_reply)
         
         # Log the prompt for debugging (but not in production)
-        if os.getenv("DEBUG_MODE", "").lower() == "true":
+        if os.getenv("DEBUG_MODE", "").lower() == "true" or verbose:
             logger.debug(f"Generated prompt:\n{prompt}")
         
         # Call the API
-        generated_text = call_openai_api(prompt)
+        generated_text = call_openai_api(prompt, verbose)
         
         # Process and return the response
         return clean_response(generated_text)

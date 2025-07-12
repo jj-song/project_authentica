@@ -32,257 +32,162 @@ TARGET_SUBREDDITS = ['SkincareAddiction', 'testingground4bots', 'formula1']
 os.environ["ENABLE_THREAD_ANALYSIS"] = "true"
 
 
-def run_once(subreddit_name: str = 'formula1', post_limit: int = 1, verbose: bool = True) -> None:
+def run_once(subreddit_name, post_limit=10, verbose=False):
     """
-    Run the Authentica agent once without the scheduler.
-    
-    This function:
-    1. Initializes database and connections
-    2. Finds a suitable post in the specified subreddit
-    3. Analyzes the post and generates a comment
-    4. Posts the comment
+    Run the bot once on the specified subreddit.
     
     Args:
-        subreddit_name (str): Name of the subreddit to scan (without the 'r/' prefix)
-        post_limit (int): Maximum number of posts to process
-        verbose (bool): Whether to print detailed information about the process
+        subreddit_name (str): The name of the subreddit to run on.
+        post_limit (int, optional): The maximum number of posts to process. Defaults to 10.
+        verbose (bool, optional): Whether to print verbose output. Defaults to False.
     """
-    # Set up logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
     logger = logging.getLogger("AuthenticaOneShot")
-    
     logger.info(f"Starting one-time run of Project Authentica for r/{subreddit_name}...")
     
+    # Initialize database
+    logger.info("Initializing database...")
+    db_conn = init_db()
+    logger.info("Database connection established")
+    
     try:
-        # Initialize database
-        logger.info("Initializing database...")
-        initialize_database()
-        
-        # Get database connection
-        db_conn = get_db_connection()
-        logger.info("Database connection established")
-        
-        # Get Reddit instance
+        # Authenticate with Reddit
         logger.info(f"Authenticating as {BOT_USERNAME}...")
-        reddit = get_reddit_instance(BOT_USERNAME)
-        logger.info(f"Successfully authenticated as {reddit.user.me()}")
+        try:
+            reddit = get_reddit_instance(BOT_USERNAME)
+            logger.info(f"Successfully authenticated as {reddit.user.me().name}")
+        except ValueError as e:
+            if "banned or suspended" in str(e):
+                logger.error(f"ACCOUNT BANNED: {str(e)}")
+                print(f"\nERROR: {str(e)}")
+                print("Please check your account status on Reddit or try with a different account.")
+                return
+            else:
+                logger.error(f"Authentication error: {str(e)}")
+                raise
         
-        # Create context collector to inspect what we're gathering
-        collector = ContextCollector(reddit)
-        
-        # Create agent
-        agent = KarmaAgent(reddit, db_conn)
+        # Initialize KarmaAgent
+        karma_agent = KarmaAgent(reddit, db_conn)
         logger.info("KarmaAgent initialized")
         
-        # First get a suitable post to analyze
+        # Find a suitable post in the subreddit
         logger.info(f"Finding a suitable post in r/{subreddit_name}...")
+        
+        # Get posts from the subreddit
         subreddit = reddit.subreddit(subreddit_name)
         
-        # Get posts from different sort methods to find an unlocked one
-        posts = []
-        posts.extend(list(subreddit.new(limit=5)))
-        posts.extend(list(subreddit.rising(limit=5)))
-        posts.extend(list(subreddit.hot(limit=10)))
+        # Skip posts if specified
+        skip_posts = os.environ.get('SKIP_POSTS', '').split(',')
         
-        # Find a suitable post (non-stickied, with comments, not locked)
-        suitable_posts = []
-        for post in posts:
-            if not post.stickied and post.num_comments > 2 and not post.locked:
-                try:
-                    # Try to get comments to verify it's not locked
-                    post.comments.replace_more(limit=0)
-                    if len(post.comments) > 0:
-                        suitable_posts.append(post)
-                        if len(suitable_posts) >= post_limit:
-                            break
-                except Exception as e:
-                    logger.info(f"Skipping post {post.id}: {str(e)}")
-                    continue
+        # Find a suitable post
+        selected_post = None
+        for post in subreddit.hot(limit=post_limit):
+            if post.id in skip_posts:
+                continue
+            if post.num_comments > 0:
+                selected_post = post
+                break
         
-        if not suitable_posts:
-            logger.error(f"No suitable posts found in r/{subreddit_name}. Exiting.")
+        if selected_post is None:
+            logger.error(f"No suitable posts found in r/{subreddit_name}")
             return
         
-        for suitable_post in suitable_posts:
-            # Collect and print context for the selected post
-            logger.info(f"Selected post: '{suitable_post.title}'")
-            context = collector.collect_context(suitable_post)
+        logger.info(f"Selected post: '{selected_post.title}'")
+        
+        # Collect context
+        context = collect_context(selected_post)
+        
+        # Analyze the thread
+        thread_analyzer = ThreadAnalyzer(reddit)
+        thread_analysis = thread_analyzer.analyze_thread(selected_post)
+        
+        # Determine response strategy
+        strategy_selector = ResponseStrategySelector(thread_analysis)
+        response_strategy = strategy_selector.select_strategy()
+        
+        # Select a template
+        template_selector = TemplateSelector()
+        template = template_selector.select_template(response_strategy, context)
+        
+        # Select variations
+        variations = template_selector.select_variations(2)  # Select 2 random variations
+        
+        # Log the selected strategy and template
+        logger.info(f"\n=== SELECTED RESPONSE STRATEGY ===\n")
+        logger.info(f"Strategy type: {response_strategy.strategy_type}")
+        logger.info(f"Reasoning: {response_strategy.reasoning}")
+        if hasattr(response_strategy, 'target_comment') and response_strategy.target_comment:
+            logger.info(f"Target comment: {response_strategy.target_comment.id} by {response_strategy.target_comment.author}")
+        elif hasattr(response_strategy, 'target') and response_strategy.target:
+            logger.info(f"Target: {response_strategy.target}")
+        
+        logger.info(f"\n=== TEMPLATE SELECTION ===\n")
+        logger.info(f"Selected Template: {template.__class__.__name__}")
+        
+        logger.info(f"\n=== SELECTED VARIATIONS ===\n")
+        for i, variation in enumerate(variations, 1):
+            logger.info(f"Variation {i}: {variation}")
+        
+        # Determine which comment to reply to
+        target_comment = None
+        if hasattr(response_strategy, 'target_comment') and response_strategy.target_comment:
+            target_comment = response_strategy.target_comment
+        
+        # Post a comment
+        logger.info(f"\n=== POSTING COMMENT ===\n")
+        if target_comment:
+            logger.info(f"Replying to comment by {target_comment.author}: {target_comment.body[:100]}...")
+            logger.info(f"Comment score: {target_comment.score}")
+        else:
+            logger.info(f"Posting a top-level comment on '{selected_post.title}'")
+        
+        # Generate and post the comment
+        try:
+            llm_handler = LLMHandler()
             
-            if verbose:
-                # Print important context factors
-                print("\n=== IMPORTANT CONTEXT FACTORS ===\n")
-                print(f"Post Title: {context['submission']['title']}")
-                print(f"Post Score: {context['submission']['score']}")
-                print(f"Post Author: {context['submission']['author']}")
-                print(f"Number of Comments: {context['submission']['num_comments']}")
-                print(f"Subreddit: r/{context['subreddit']['name']}")
-                print(f"Subreddit Description: {context['subreddit']['description']}")
-                print(f"Subreddit Subscribers: {context['subreddit']['subscribers']}")
-                print(f"Day of Week: {context['temporal']['day_of_week']}")
-                print(f"Hour of Day: {context['temporal']['hour_of_day']}")
-                
-                # Print top comments for context
-                print("\n=== TOP COMMENTS USED FOR CONTEXT ===\n")
-                for i, comment in enumerate(context['comments'][:3], 1):
-                    print(f"Comment {i} (Score: {comment['score']}):")
-                    print(f"Author: {comment['author']}")
-                    print(f"Content: {comment['body'][:150]}..." if len(comment['body']) > 150 else f"Content: {comment['body']}")
-                    print()
-            
-            # Perform thread analysis
-            try:
-                from src.thread_analysis.analyzer import ThreadAnalyzer
-                from src.thread_analysis.strategies import ResponseStrategy
-                
-                # Create thread analyzer
-                analyzer = ThreadAnalyzer(reddit)
-                
-                # Perform analysis
-                if verbose:
-                    print("\n=== PERFORMING ADVANCED THREAD ANALYSIS ===\n")
-                thread_analysis = analyzer.analyze_thread(suitable_post)
-                
-                if verbose:
-                    # Print basic stats
-                    print(f"Comment count: {thread_analysis['comment_count']}")
-                    print(f"Thread depth: {thread_analysis['thread_depth']}")
-                    print(f"Key topics: {', '.join(thread_analysis['key_topics'])}")
-                
-                # Generate response strategy
-                strategy_generator = ResponseStrategy()
-                strategy = strategy_generator.determine_strategy(thread_analysis, context)
-                
-                if verbose:
-                    # Print strategy
-                    print("\n=== SELECTED RESPONSE STRATEGY ===\n")
-                    print(f"Strategy type: {strategy['type']}")
-                    print(f"Reasoning: {strategy['reasoning']}")
-                    
-                    if strategy['target_comment']:
-                        print(f"Target comment: {strategy['target_comment']['id']} by {strategy['target_comment']['author']}")
-                    else:
-                        print("Target: Direct reply to submission")
-            except ImportError:
-                if verbose:
-                    print("\nThread analysis modules not available. Skipping advanced analysis.")
-            except Exception as e:
-                if verbose:
-                    print(f"\nError in thread analysis: {str(e)}")
-            
-            if verbose:
-                # Show template selection and variations
-                template_selector = TemplateSelector()
-                selected_template = template_selector.select_template(context)
-                print("\n=== TEMPLATE SELECTION ===\n")
-                print(f"Selected Template: {selected_template.__class__.__name__}")
-                
-                variations = VariationEngine.get_random_variations(2)
-                print("\n=== SELECTED VARIATIONS ===\n")
-                for i, variation in enumerate(variations, 1):
-                    print(f"Variation {i}: {variation}")
+            # Get the comment content
+            comment_content = llm_handler.generate_response(
+                selected_post,
+                target_comment,
+                response_strategy,
+                template,
+                variations,
+                context,
+                reddit,
+                db_conn,
+                verbose=verbose
+            )
             
             # Post the comment
-            if verbose:
-                print("\n=== POSTING COMMENT ===\n")
-            try:
-                # Replace MoreComments objects to get a flattened comment tree
-                suitable_post.comments.replace_more(limit=0)
-                
-                # Filter for comments that:
-                # 1. Have a positive score
-                # 2. Are not from the bot itself
-                # 3. Have some substance (not too short)
-                eligible_comments = [
-                    comment for comment in suitable_post.comments
-                    if (comment.score > 0 and 
-                        str(comment.author) != agent.username and
-                        len(comment.body) >= 20)
-                ]
-                
-                if eligible_comments:
-                    # Sort by score and select a comment from the top 3 (if available)
-                    eligible_comments.sort(key=lambda c: c.score, reverse=True)
-                    top_comments = eligible_comments[:min(3, len(eligible_comments))]
-                    selected_comment = random.choice(top_comments)
+            if not os.environ.get('DRY_RUN', False):
+                try:
+                    if target_comment:
+                        reply = target_comment.reply(comment_content)
+                    else:
+                        reply = selected_post.reply(comment_content)
                     
-                    if verbose:
-                        print(f"Replying to comment by {selected_comment.author}: {selected_comment.body[:100]}...")
-                        print(f"Comment score: {selected_comment.score}")
+                    logger.info(f"Reply posted successfully! Comment ID: {reply.id}")
+                    logger.info(f"View at: {reply.permalink}")
                     
-                    # Generate a reply using context-aware LLM handler
-                    reply_text = generate_comment_from_submission(suitable_post, reddit, comment_to_reply=selected_comment)
-                    
-                    if verbose:
-                        print(f"Generated Reply:\n{reply_text}\n")
-                    
-                    # Post the reply
-                    reply = selected_comment.reply(reply_text)
-                    
-                    if verbose:
-                        print(f"Reply posted successfully! Comment ID: {reply.id}")
-                        print(f"View at: https://www.reddit.com{suitable_post.permalink}{selected_comment.id}/{reply.id}/")
-                    
-                    # Create a record in comment_performance table
-                    current_time = datetime.datetime.now().isoformat()
-                    cursor = db_conn.cursor()
-                    cursor.execute(
-                        """
-                        INSERT INTO comment_performance 
-                        (comment_id, submission_id, subreddit, initial_score, current_score, last_checked) 
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        """,
-                        (reply.id, suitable_post.id, subreddit_name, 1, 1, current_time)
-                    )
-                    db_conn.commit()
-                else:
-                    # No suitable comments found, post directly to the submission
-                    if verbose:
-                        print("No suitable comments found. Posting directly to submission...")
-                    
-                    # Generate the comment directly
-                    comment_text = generate_comment_from_submission(suitable_post, reddit)
-                    
-                    if verbose:
-                        print(f"Generated Comment:\n{comment_text}\n")
-                    
-                    # Post the comment
-                    comment = suitable_post.reply(comment_text)
-                    
-                    if verbose:
-                        print(f"Comment posted successfully! Comment ID: {comment.id}")
-                        print(f"View at: https://www.reddit.com{suitable_post.permalink}{comment.id}/")
-                    
-                    # Create a record in comment_performance table
-                    current_time = datetime.datetime.now().isoformat()
-                    cursor = db_conn.cursor()
-                    cursor.execute(
-                        """
-                        INSERT INTO comment_performance 
-                        (comment_id, submission_id, subreddit, initial_score, current_score, last_checked) 
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        """,
-                        (comment.id, suitable_post.id, subreddit_name, 1, 1, current_time)
-                    )
-                    db_conn.commit()
-            
-            except Exception as e:
-                logger.error(f"Error posting comment: {str(e)}")
-                if verbose:
+                    # Record the comment in the database
+                    karma_agent.record_comment(reply.id, selected_post.id, target_comment.id if target_comment else None)
+                except praw.exceptions.RedditAPIException as e:
+                    logger.error(f"Error posting comment: {str(e)}")
                     print(f"Error posting comment: {str(e)}")
+            else:
+                logger.info("DRY RUN: Comment not posted")
+                logger.info(f"Generated Reply:\n{comment_content}")
+        except Exception as e:
+            logger.error(f"Error generating or posting comment: {str(e)}")
+            raise
         
         logger.info("One-time run completed successfully")
-        
     except Exception as e:
         logger.error(f"Error in one-time run: {str(e)}")
         raise
-        
     finally:
         # Close database connection
-        if 'db_conn' in locals():
-            logger.info("Closing database connection...")
+        logger.info("Closing database connection...")
+        if db_conn:
             db_conn.close()
 
 
