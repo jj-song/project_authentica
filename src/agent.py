@@ -15,6 +15,9 @@ from praw.exceptions import PRAWException, APIException, ClientException
 from praw.models import Submission, Comment
 
 from src.llm_handler import generate_comment, generate_comment_from_submission
+from src.utils.database_utils import ensure_bot_registered
+from src.utils.error_utils import handle_exceptions, RedditAPIError
+from src.utils.logging_utils import get_component_logger
 
 
 class KarmaAgent:
@@ -38,14 +41,14 @@ class KarmaAgent:
         self.username = str(self.reddit.user.me())
         
         # Configure logging
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        self.logger = logging.getLogger(f"KarmaAgent-{self.username}")
+        self.logger = get_component_logger(f"KarmaAgent-{self.username}")
+        
+        # Register bot in database to prevent foreign key constraint failures
+        ensure_bot_registered(self.db, self.username)
         
         self.logger.info(f"KarmaAgent initialized for user: {self.username}")
     
+    @handle_exceptions
     def scan_and_comment(self, subreddit_name: str, post_limit: int = 10, sort: str = 'hot') -> None:
         """
         Scan a subreddit for posts, identify relevant ones, and post AI-generated comments.
@@ -110,6 +113,7 @@ class KarmaAgent:
                 status="FAILURE",
                 details=f"PRAW error: {str(e)}"
             )
+            raise RedditAPIError(f"PRAW error during scan: {str(e)}")
         except Exception as e:
             self.logger.error(f"Unexpected error during scan of r/{subreddit_name}: {str(e)}")
             self._log_action(
@@ -118,6 +122,7 @@ class KarmaAgent:
                 status="FAILURE",
                 details=f"Unexpected error: {str(e)}"
             )
+            raise
     
     def _process_submission(self, submission: praw.models.Submission, subreddit_name: str) -> None:
         """
@@ -160,43 +165,17 @@ class KarmaAgent:
             # Use the new context-aware comment generation
             comment_text = generate_comment_from_submission(submission, self.reddit)
             
-            # Post the comment
-            self.logger.info(f"Attempting to comment on submission {submission.id}")
-            comment = submission.reply(comment_text)
+            # Post the comment using the standardized method
+            comment = self.reply_to_submission(submission, comment_text)
             
-            # Log the successful comment
-            self.logger.info(f"Successfully commented on submission {submission.id}, comment ID: {comment.id}")
-            self._log_action(
-                action_type="COMMENT",
-                target_id=submission.id,
-                status="SUCCESS",
-                details=f"Comment posted with ID {comment.id}"
-            )
-            
-            # Create a record in comment_performance table
-            current_time = datetime.datetime.now().isoformat()
-            cursor.execute(
-                """
-                INSERT INTO comment_performance 
-                (comment_id, submission_id, subreddit, initial_score, current_score, last_checked) 
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (comment.id, submission.id, subreddit_name, 1, 1, current_time)
-            )
-            self.db.commit()
-            
-        except (PRAWException, APIException, ClientException) as e:
-            self.logger.error(f"Error posting comment to {submission.id}: {str(e)}")
-            self._log_action(
-                action_type="COMMENT",
-                target_id=submission.id,
-                status="FAILURE",
-                details=f"PRAW error: {str(e)}"
-            )
+            if not comment:
+                self.logger.error(f"Failed to post comment on submission {submission.id}")
+                return
+                
         except Exception as e:
-            self.logger.error(f"Unexpected error posting comment to {submission.id}: {str(e)}")
+            self.logger.error(f"Unexpected error processing submission {submission.id}: {str(e)}")
             self._log_action(
-                action_type="COMMENT",
+                action_type="PROCESS_ERROR",
                 target_id=submission.id,
                 status="FAILURE",
                 details=f"Unexpected error: {str(e)}"
@@ -204,7 +183,7 @@ class KarmaAgent:
     
     def _try_reply_to_comment(self, submission: Submission, subreddit_name: str) -> bool:
         """
-        Try to reply to an existing comment instead of the submission.
+        Try to find a suitable comment to reply to in the submission.
         
         Args:
             submission (Submission): The Reddit submission
@@ -240,36 +219,13 @@ class KarmaAgent:
             # Generate a reply using context-aware LLM handler
             comment_text = generate_comment_from_submission(submission, self.reddit, comment_to_reply=selected_comment)
             
-            # Post the reply
-            self.logger.info(f"Attempting to reply to comment {selected_comment.id} in submission {submission.id}")
-            reply = selected_comment.reply(comment_text)
+            # Post the reply using the standardized method
+            reply = self.reply_to_comment(selected_comment, comment_text)
             
-            # Log the successful reply
-            self.logger.info(f"Successfully replied to comment {selected_comment.id}, reply ID: {reply.id}")
-            self._log_action(
-                action_type="COMMENT_REPLY",
-                target_id=selected_comment.id,
-                status="SUCCESS",
-                details=f"Reply posted with ID {reply.id} on submission {submission.id}"
-            )
-            
-            # Create a record in comment_performance table
-            current_time = datetime.datetime.now().isoformat()
-            cursor = self.db.cursor()
-            cursor.execute(
-                """
-                INSERT INTO comment_performance 
-                (comment_id, submission_id, subreddit, initial_score, current_score, last_checked) 
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (reply.id, submission.id, subreddit_name, 1, 1, current_time)
-            )
-            self.db.commit()
-            
-            return True
+            return reply is not None
             
         except Exception as e:
-            self.logger.error(f"Error trying to reply to a comment in submission {submission.id}: {str(e)}")
+            self.logger.error(f"Error finding comment to reply to in {submission.id}: {str(e)}")
             return False
     
     def _is_post_relevant(self, submission: praw.models.Submission) -> bool:
@@ -277,30 +233,25 @@ class KarmaAgent:
         Determine if a post is relevant for commenting.
         
         Args:
-            submission (praw.models.Submission): The Reddit submission to evaluate
+            submission (praw.models.Submission): The Reddit submission to check
             
         Returns:
             bool: True if the post is relevant, False otherwise
         """
-        # Skip stickied posts (like daily threads)
-        if submission.stickied:
-            self.logger.info(f"Skipping stickied post {submission.id}: {submission.title}")
+        # Skip posts that are too old (>24 hours)
+        post_age = datetime.datetime.now().timestamp() - submission.created_utc
+        if post_age > 86400:  # 86400 seconds = 24 hours
+            self.logger.info(f"Submission {submission.id} is too old ({post_age/3600:.1f} hours), skipping")
             return False
         
-        # Skip posts with "daily" or "thread" in the title (common for recurring threads)
-        title_lower = submission.title.lower()
-        if ("daily" in title_lower and "thread" in title_lower) or "daily help thread" in title_lower:
-            self.logger.info(f"Skipping daily thread post {submission.id}: {submission.title}")
-            return False
-        
-        # Skip posts with very low scores
-        if submission.score < 1:
-            self.logger.info(f"Skipping low-score post {submission.id}: score {submission.score}")
-            return False
-        
-        # Skip posts with no comments (prefer posts with some engagement)
+        # Skip posts with no comments
         if submission.num_comments == 0:
-            self.logger.info(f"Skipping post with no comments {submission.id}")
+            self.logger.info(f"Submission {submission.id} has no comments, skipping")
+            return False
+        
+        # Skip posts with negative score
+        if submission.score < 1:
+            self.logger.info(f"Submission {submission.id} has negative score, skipping")
             return False
         
         # TODO: Add more relevance criteria as needed
@@ -318,6 +269,9 @@ class KarmaAgent:
             details (Optional[str], optional): Additional details about the action. Defaults to None.
         """
         try:
+            # Ensure bot is registered to prevent foreign key constraint failures
+            ensure_bot_registered(self.db, self.username)
+            
             timestamp = datetime.datetime.now().isoformat()
             cursor = self.db.cursor()
             cursor.execute(
@@ -334,13 +288,14 @@ class KarmaAgent:
         except Exception as e:
             self.logger.error(f"Unexpected error when logging action: {str(e)}")
 
-    def record_comment(self, comment_id: str, submission_id: str, reply_to_id: Optional[str] = None) -> None:
+    def record_comment(self, comment_id: str, submission_id: str, subreddit_name: str, reply_to_id: Optional[str] = None) -> None:
         """
         Record a comment in the database after successful posting.
         
         Args:
             comment_id (str): ID of the posted comment
             submission_id (str): ID of the submission the comment was posted on
+            subreddit_name (str): Name of the subreddit
             reply_to_id (Optional[str], optional): ID of the comment being replied to, if any. Defaults to None.
         """
         try:
@@ -355,14 +310,6 @@ class KarmaAgent:
             # Create a record in comment_performance table
             current_time = datetime.datetime.now().isoformat()
             cursor = self.db.cursor()
-            
-            # Get the subreddit name from the submission ID if needed
-            subreddit_name = "unknown"  # Default fallback
-            try:
-                submission = self.reddit.submission(id=submission_id)
-                subreddit_name = str(submission.subreddit)
-            except Exception as e:
-                self.logger.error(f"Error getting subreddit name for submission {submission_id}: {str(e)}")
             
             # Insert into comment_performance table
             cursor.execute(
@@ -403,7 +350,8 @@ class KarmaAgent:
             )
             
             # Record the comment
-            self.record_comment(reply.id, comment.submission.id, comment.id)
+            subreddit_name = str(comment.subreddit)
+            self.record_comment(reply.id, comment.submission.id, subreddit_name, comment.id)
             
             return reply
         except Exception as e:
@@ -441,7 +389,8 @@ class KarmaAgent:
             )
             
             # Record the comment
-            self.record_comment(comment.id, submission.id)
+            subreddit_name = str(submission.subreddit)
+            self.record_comment(comment.id, submission.id, subreddit_name)
             
             return comment
         except Exception as e:
@@ -453,6 +402,59 @@ class KarmaAgent:
                 details=f"Error: {str(e)}"
             )
             return None
+            
+    def update_comment_performance(self, comment_id: str) -> Dict[str, Any]:
+        """
+        Update the performance metrics for a comment.
+        
+        Args:
+            comment_id (str): ID of the comment to update
+            
+        Returns:
+            Dict[str, Any]: Updated performance metrics
+        """
+        try:
+            # Get the comment from Reddit
+            comment = self.reddit.comment(id=comment_id)
+            comment.refresh()  # Make sure we have the latest data
+            
+            # Get current data from database
+            cursor = self.db.cursor()
+            cursor.execute(
+                "SELECT * FROM comment_performance WHERE comment_id = ?", 
+                (comment_id,)
+            )
+            perf_data = cursor.fetchone()
+            
+            if not perf_data:
+                self.logger.error(f"No performance data found for comment {comment_id}")
+                return {}
+            
+            # Update the performance data
+            current_time = datetime.datetime.now().isoformat()
+            cursor.execute(
+                """
+                UPDATE comment_performance 
+                SET current_score = ?, last_checked = ?
+                WHERE comment_id = ?
+                """,
+                (comment.score, current_time, comment_id)
+            )
+            self.db.commit()
+            
+            # Return the updated metrics
+            return {
+                "comment_id": comment_id,
+                "submission_id": perf_data["submission_id"],
+                "subreddit": perf_data["subreddit"],
+                "initial_score": perf_data["initial_score"],
+                "current_score": comment.score,
+                "score_change": comment.score - perf_data["initial_score"],
+                "last_checked": current_time
+            }
+        except Exception as e:
+            self.logger.error(f"Error updating performance for comment {comment_id}: {str(e)}")
+            return {}
 
 
 if __name__ == "__main__":
