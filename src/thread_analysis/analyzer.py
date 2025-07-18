@@ -522,5 +522,5 @@ class ThreadAnalyzer:
             scored_submissions.append((score, submission))
         
         # Sort by score (descending)
-        scored_submissions.sort(reverse=True)
+        scored_submissions.sort(key=lambda x: x[0], reverse=True)
         return scored_submissions 
