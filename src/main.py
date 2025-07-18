@@ -128,108 +128,113 @@ def run_once(subreddit_name, post_limit=10, sort='hot', verbose=False):
         # Get posts from the subreddit
         subreddit = reddit.subreddit(subreddit_name)
         
-        # Get posts based on sort method
+        # Get posts based on sort method - fetch more posts than needed for better selection
+        fetch_limit = post_limit * 3
         if sort == 'hot':
-            posts = subreddit.hot(limit=post_limit)
+            posts = list(subreddit.hot(limit=fetch_limit))
         elif sort == 'new':
-            posts = subreddit.new(limit=post_limit)
+            posts = list(subreddit.new(limit=fetch_limit))
         elif sort == 'top':
-            posts = subreddit.top(limit=post_limit)
+            posts = list(subreddit.top(limit=fetch_limit))
         elif sort == 'rising':
-            posts = subreddit.rising(limit=post_limit)
+            posts = list(subreddit.rising(limit=fetch_limit))
         else:
-            posts = subreddit.hot(limit=post_limit)
+            posts = list(subreddit.hot(limit=fetch_limit))
             logger.warning(f"Invalid sort method '{sort}', using 'hot' instead")
         
         # Skip posts if specified
         skip_posts = os.environ.get('SKIP_POSTS', '').split(',')
+        posts = [post for post in posts if post.id not in skip_posts]
         
-        # Find a suitable post
-        selected_post = None
-        for post in posts:
-            if post.id in skip_posts:
-                continue
-            if post.num_comments > 0:
-                selected_post = post
-                break
+        # Initialize thread analyzer for ranking posts
+        thread_analyzer = ThreadAnalyzer(reddit)
         
-        if selected_post is None:
+        # Rank the posts by engagement potential
+        ranked_posts = thread_analyzer.rank_submissions(posts)
+        
+        if not ranked_posts:
             logger.error(f"No suitable posts found in r/{subreddit_name}")
             return
         
-        logger.info(f"Selected post: '{selected_post.title}'")
-        
-        # Collect context
-        collector = ContextCollector(reddit)
-        context = collector.collect_context(selected_post)
-        
-        # Analyze the thread
-        thread_analyzer = ThreadAnalyzer(reddit)
-        thread_analysis = thread_analyzer.analyze_thread(selected_post)
+        # Process the top-ranked posts
+        processed_count = 0
+        for score, post in ranked_posts:
+            if processed_count >= post_limit:
+                break
+                
+            logger.info(f"Processing post with quality score {score:.2f}: '{post.title}'")
+            selected_post = post
+            
+            # Collect context
+            collector = ContextCollector(reddit)
+            context = collector.collect_context(selected_post)
+            
+            # Analyze the thread
+            thread_analysis = thread_analyzer.analyze_thread(selected_post)
 
-        # Determine response strategy
-        strategy = ResponseStrategy()
-        response_strategy = strategy.determine_strategy(thread_analysis, context)
+            # Determine response strategy
+            strategy = ResponseStrategy()
+            response_strategy = strategy.determine_strategy(thread_analysis, context)
 
-        # Select a template
-        template_selector = TemplateSelector()
-        template = template_selector.select_template(response_strategy, context)
+            # Select a template
+            template_selector = TemplateSelector()
+            template = template_selector.select_template(response_strategy, context)
 
-        # Select variations
-        variations = VariationEngine.get_random_variations(2)  # Select 2 random variations
+            # Select variations
+            variations = VariationEngine.get_random_variations(2)  # Select 2 random variations
 
-        # Log the selected strategy and template
-        logger.info(f"\n=== SELECTED RESPONSE STRATEGY ===\n")
-        logger.info(f"Strategy type: {response_strategy['type']}")
-        logger.info(f"Reasoning: {response_strategy['reasoning']}")
-        if response_strategy.get('target_comment'):
-            logger.info(f"Target comment: {response_strategy['target_comment'].get('id')} by {response_strategy['target_comment'].get('author')}")
-        elif response_strategy.get('target'):
-            logger.info(f"Target: {response_strategy['target']}")
+            # Log the selected strategy and template
+            logger.info(f"\n=== SELECTED RESPONSE STRATEGY ===\n")
+            logger.info(f"Strategy type: {response_strategy['type']}")
+            logger.info(f"Reasoning: {response_strategy['reasoning']}")
+            if response_strategy.get('target_comment'):
+                logger.info(f"Target comment: {response_strategy['target_comment'].get('id')} by {response_strategy['target_comment'].get('author')}")
+            elif response_strategy.get('target'):
+                logger.info(f"Target: {response_strategy['target']}")
 
-        logger.info(f"\n=== TEMPLATE SELECTION ===\n")
-        logger.info(f"Selected Template: {template.__class__.__name__}")
+            logger.info(f"\n=== TEMPLATE SELECTION ===\n")
+            logger.info(f"Selected Template: {template.__class__.__name__}")
 
-        logger.info(f"\n=== SELECTED VARIATIONS ===\n")
-        for i, variation in enumerate(variations, 1):
-            logger.info(f"Variation {i}: {variation}")
-        
-        # Determine which comment to reply to
-        target_comment = None
-        if response_strategy.get('target_comment'):
-            # Find the comment in the submission
-            for comment in selected_post.comments.list():
-                if hasattr(comment, "id") and comment.id == response_strategy['target_comment'].get("id"):
-                    target_comment = comment
-                    break
-        
-        # Generate a comment
-        logger.info("Generating comment...")
-        comment_text = generate_comment_from_submission(
-            selected_post, 
-            reddit, 
-            variation_count=2, 
-            comment_to_reply=target_comment,
-            verbose=verbose
-        )
-        
-        # Post the comment
-        if not config["runtime"]["dry_run"]:
-            logger.info("Posting comment...")
-            if target_comment:
-                logger.info(f"Replying to comment by u/{target_comment.author}")
-                karma_agent.reply_to_comment(target_comment, comment_text)
+            logger.info(f"\n=== SELECTED VARIATIONS ===\n")
+            for i, variation in enumerate(variations, 1):
+                logger.info(f"Variation {i}: {variation}")
+            
+            # Determine which comment to reply to
+            target_comment = None
+            if response_strategy.get('target_comment'):
+                # Find the comment in the submission
+                for comment in selected_post.comments.list():
+                    if hasattr(comment, "id") and comment.id == response_strategy['target_comment'].get("id"):
+                        target_comment = comment
+                        break
+            
+            # Generate a comment
+            logger.info("Generating comment...")
+            comment_text = generate_comment_from_submission(
+                selected_post, 
+                reddit, 
+                variation_count=2, 
+                comment_to_reply=target_comment,
+                verbose=verbose
+            )
+            
+            # Post the comment
+            if not config["runtime"]["dry_run"]:
+                logger.info("Posting comment...")
+                if target_comment:
+                    logger.info(f"Replying to comment by u/{target_comment.author}")
+                    karma_agent.reply_to_comment(target_comment, comment_text)
+                else:
+                    logger.info("Replying to submission")
+                    karma_agent.reply_to_submission(selected_post, comment_text)
+                logger.info("Comment posted successfully!")
             else:
-                logger.info("Replying to submission")
-                karma_agent.reply_to_submission(selected_post, comment_text)
-            logger.info("Comment posted successfully!")
-        else:
-            logger.info("DRY RUN: Comment not posted")
-            print("\n=== GENERATED COMMENT ===\n")
-            print(comment_text)
-        
-        logger.info("Run completed successfully!")
-        
+                logger.info("DRY RUN: Comment not posted")
+                print("\n=== GENERATED COMMENT ===\n")
+                print(comment_text)
+            
+            logger.info("Run completed successfully!")
+            
     except Exception as e:
         logger.error(f"Error: {str(e)}")
     finally:

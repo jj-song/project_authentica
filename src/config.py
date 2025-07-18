@@ -33,6 +33,9 @@ DEFAULT_ENV_VARS = {
     "ENABLE_HUMANIZATION": "true",
     "DRY_RUN": "false",
     "BOT_USERNAME": "my_first_bot",
+    "SKIP_STICKIED_POSTS": "true",
+    "SKIP_META_POSTS": "true",
+    "MIN_POST_QUALITY_SCORE": "40",
 }
 
 def validate_environment() -> Dict[str, str]:

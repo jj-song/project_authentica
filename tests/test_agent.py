@@ -695,3 +695,57 @@ def test_process_submission_falls_back_to_submission_reply(agent_setup, mocker):
                 break
     
     assert comment_log_call is not None, "No successful comment action was logged" 
+
+def test_is_post_relevant_stickied(agent_setup, mocker):
+    """
+    Test that stickied posts are identified as not relevant.
+    """
+    agent, _, _ = agent_setup
+    
+    # Create a stickied post
+    mock_submission = mocker.MagicMock()
+    mock_submission.stickied = True
+    mock_submission.created_utc = datetime.datetime.now().timestamp() - 3600  # 1 hour ago
+    mock_submission.num_comments = 10
+    mock_submission.score = 5
+    
+    # Should return False for stickied posts
+    assert not agent._is_post_relevant(mock_submission)
+    agent.logger.info.assert_called_with(f"Submission {mock_submission.id} is stickied, skipping")
+
+def test_is_post_relevant_distinguished(agent_setup, mocker):
+    """
+    Test that distinguished posts are identified as not relevant.
+    """
+    agent, _, _ = agent_setup
+    
+    # Create a distinguished post
+    mock_submission = mocker.MagicMock()
+    mock_submission.stickied = False
+    mock_submission.distinguished = "moderator"
+    mock_submission.created_utc = datetime.datetime.now().timestamp() - 3600  # 1 hour ago
+    mock_submission.num_comments = 10
+    mock_submission.score = 5
+    
+    # Should return False for distinguished posts
+    assert not agent._is_post_relevant(mock_submission)
+    agent.logger.info.assert_called_with(f"Submission {mock_submission.id} is distinguished, skipping")
+
+def test_is_post_relevant_meta(agent_setup, mocker):
+    """
+    Test that meta posts are identified as not relevant.
+    """
+    agent, _, _ = agent_setup
+    
+    # Create a meta post
+    mock_submission = mocker.MagicMock()
+    mock_submission.stickied = False
+    mock_submission.distinguished = None
+    mock_submission.title = "Announcement: New Subreddit Rules"
+    mock_submission.created_utc = datetime.datetime.now().timestamp() - 3600  # 1 hour ago
+    mock_submission.num_comments = 10
+    mock_submission.score = 5
+    
+    # Should return False for meta posts
+    assert not agent._is_post_relevant(mock_submission)
+    agent.logger.info.assert_called_with(f"Submission {mock_submission.id} appears to be a meta post based on title, skipping") 
