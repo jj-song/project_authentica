@@ -85,7 +85,7 @@ class StandardPromptTemplate(PromptTemplate):
         representative_comments = context.get("representative_comments", [])
         if representative_comments:
             representative_comment_texts.append("Here are some typical comments from this subreddit:")
-            for i, comment in enumerate(representative_comments[:3]):  # Limit to 3 examples
+            for i, comment in enumerate(representative_comments[:5]):  # Limit to 5 examples
                 representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
         
         representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
@@ -177,7 +177,7 @@ class DirectSubmissionReplyTemplate(PromptTemplate):
         representative_comments = context.get("representative_comments", [])
         if representative_comments:
             representative_comment_texts.append("Here are some typical comments from this subreddit:")
-            for i, comment in enumerate(representative_comments[:3]):  # Limit to 3 examples
+            for i, comment in enumerate(representative_comments[:5]):  # Limit to 5 examples
                 representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
         
         representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
@@ -304,7 +304,7 @@ class SubredditSpecificTemplate(PromptTemplate):
         representative_comments = context.get("representative_comments", [])
         if representative_comments:
             representative_comment_texts.append("Here are some typical comments from this subreddit:")
-            for i, comment in enumerate(representative_comments[:3]):  # Limit to 3 examples
+            for i, comment in enumerate(representative_comments[:5]):  # Limit to 5 examples
                 representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
         
         representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
@@ -439,7 +439,7 @@ class PersonaBasedTemplate(PromptTemplate):
         representative_comments = context.get("representative_comments", [])
         if representative_comments:
             representative_comment_texts.append("Here are some typical comments from this subreddit:")
-            for i, comment in enumerate(representative_comments[:3]):  # Limit to 3 examples
+            for i, comment in enumerate(representative_comments[:5]):  # Limit to 5 examples
                 representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
         
         representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
@@ -622,7 +622,7 @@ class ContentTypeTemplate(PromptTemplate):
         representative_comments = context.get("representative_comments", [])
         if representative_comments:
             representative_comment_texts.append("Here are some typical comments from this subreddit:")
-            for i, comment in enumerate(representative_comments[:3]):  # Limit to 3 examples
+            for i, comment in enumerate(representative_comments[:5]):  # Limit to 5 examples
                 representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
         
         representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
@@ -735,7 +735,7 @@ class CommentReplyTemplate(PromptTemplate):
         representative_comments = context.get("representative_comments", [])
         if representative_comments:
             representative_comment_texts.append("Here are some typical comments from this subreddit:")
-            for i, comment in enumerate(representative_comments[:2]):  # Limit to 2 examples for replies
+            for i, comment in enumerate(representative_comments[:5]):  # Limit to 5 examples for replies
                 representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
         
         representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
