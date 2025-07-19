@@ -475,6 +475,22 @@ class CommentReplyTemplate(PromptTemplate):
         comment_author = comment_to_reply.get("author", "[deleted]")
         comment_body = comment_to_reply.get("body", "")
         
+        # Determine the target audience
+        is_replying_to_op = comment_to_reply.get("is_op", False)
+        
+        # Create different instructions based on who we're replying to
+        if is_replying_to_op:
+            audience_instruction = """
+You are replying to a comment by the original poster.
+Address your response directly to them as the person who wrote the original post.
+"""
+        else:
+            audience_instruction = """
+You are replying to a comment by someone who is NOT the original poster.
+Address your response directly to the commenter, not to the original poster.
+Respond to their specific points and perspective as a commenter.
+"""
+        
         # Generate the prompt
         prompt = f"""
 You are replying to a comment on a Reddit post in r/{subreddit["name"]}.
@@ -483,7 +499,9 @@ The original post is:
 Title: {submission["title"]}
 Content: {submission["body"]}
 
-You are specifically replying to this comment by u/{comment_author}:
+{audience_instruction}
+
+You are specifically replying to this comment:
 "{comment_body}"
 
 Write a natural, conversational reply that:
@@ -499,6 +517,7 @@ Your reply should NOT:
 - Use bullet points or numbered lists unless absolutely necessary
 - Exceed 800 characters
 - Repeat the same points already made in the comment
+- Include usernames or direct references like "u/username"
 
 Just write the reply text directly, without any additional formatting or explanation.
 """
@@ -654,6 +673,8 @@ class TemplateSelector:
                 "body": comment_to_reply.body,
                 "author": str(comment_to_reply.author) if comment_to_reply.author else "[deleted]",
                 "score": comment_to_reply.score,
+                # Add a flag to indicate if this is the original poster
+                "is_op": comment_to_reply.is_submitter
             }
             
         base_prompt = template.generate(context)

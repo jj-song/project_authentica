@@ -112,6 +112,8 @@ class ResponseGenerator:
                 "body": target_comment.body,
                 "author": str(target_comment.author) if target_comment.author else "[deleted]",
                 "score": target_comment.score,
+                # Add a flag to indicate if this is the original poster
+                "is_op": target_comment.is_submitter
             }
         
         # Step 5: Generate response
