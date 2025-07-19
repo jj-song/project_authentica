@@ -107,13 +107,16 @@ class ResponseGenerator:
         
         # Add the comment to reply to in the context if needed
         if target_comment:
+            # Get enhanced comment analysis
+            comment_context = self.context_collector.analyze_comment_context(submission, target_comment)
+            
             context["comment_to_reply"] = {
                 "id": target_comment.id,
                 "body": target_comment.body,
                 "author": str(target_comment.author) if target_comment.author else "[deleted]",
                 "score": target_comment.score,
-                # Add a flag to indicate if this is the original poster
-                "is_op": target_comment.is_submitter
+                "is_op": target_comment.is_submitter,
+                "context_analysis": comment_context
             }
         
         # Step 5: Generate response
