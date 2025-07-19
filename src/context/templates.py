@@ -381,6 +381,11 @@ class PersonaBasedTemplate(PromptTemplate):
             "description": "You're like someone offering advice over the fence.",
             "tone": "warm and conversational",
             "quirks": "Uses straightforward language and offers practical advice."
+        },
+        "financially_struggling": {
+            "description": "You are someone who is really poor and financially not very well off. You often think about money and costs in everyday situations.",
+            "tone": "practical and money-conscious",
+            "quirks": "Frequently mentions cost considerations, budget-friendly alternatives, and financial constraints. Uses phrases like 'can't afford', 'on a tight budget', 'money is tight', 'cheap alternative', 'saving money', etc."
         }
     }
     
@@ -417,11 +422,8 @@ class PersonaBasedTemplate(PromptTemplate):
         # Generate a random target length between min and avg+20%
         target_length = int(min_length + (avg_length - min_length) * random.random())
         
-        # Select a random persona if none provided
-        persona_key = self.persona_key
-        if persona_key is None or persona_key not in self.PERSONAS:
-            persona_key = random.choice(list(self.PERSONAS.keys()))
-            
+        # Always use the financially struggling persona
+        persona_key = "financially_struggling"
         persona = self.PERSONAS[persona_key]
         
         # Extract top comments for context
@@ -816,6 +818,9 @@ class VariationEngine:
         "Use a slightly more informal vocabulary.",
         "Include a brief aside in parentheses.",
         "Start a sentence with a conjunction occasionally (And, But, So).",
+        "Mention cost considerations or budget constraints naturally.",
+        "Reference money-saving tips or cheap alternatives.",
+        "Express financial limitations in a matter-of-fact way.",
     ]
     
     LENGTH_VARIATIONS = [
@@ -898,19 +903,9 @@ class TemplateSelector:
         Returns:
             PromptTemplate: The selected template.
         """
-        # If replying directly to a submission (no comment)
-        if comment_to_reply is None:
-            logger.info("Selected direct_submission_reply template")
-            return self.templates["direct_submission_reply"]
-        
-        # If replying to a comment
-        if comment_to_reply is not None:
-            logger.info("Selected comment_reply template")
-            return self.templates["comment_reply"]
-        
-        # Default to standard template as a fallback
-        logger.info("Selected standard template (fallback)")
-        return self.templates["standard"]
+        # Always use the persona-based template with financially struggling persona
+        logger.info("Selected persona_based template (financially_struggling)")
+        return self.templates["persona_based"]
     
     def generate_with_variations(self, context: Dict[str, Any], variation_count: int = 2, comment_to_reply=None) -> str:
         """
