@@ -10,6 +10,7 @@ from collections import defaultdict
 import re
 import praw
 from praw.models import Submission, Comment, MoreComments
+import datetime
 
 from src.thread_analysis.conversation import ConversationFlow
 
@@ -414,22 +415,112 @@ class ThreadAnalyzer:
     
     def _process_comments_for_contributors(self, comment_forest: Dict[str, Any], user_stats: Dict[str, Dict[str, Any]]) -> None:
         """
-        Process comments to collect contributor statistics recursively.
+        Process comments to gather contributor statistics recursively.
         
         Args:
-            comment_forest (Dict[str, Any]): The comment forest.
+            comment_forest (Dict[str, Any]): The comment forest to process.
             user_stats (Dict[str, Dict[str, Any]]): User statistics to update.
         """
         for comment_id, comment_data in comment_forest.items():
-            if "author" in comment_data and comment_data["author"] != "[deleted]":
-                author = comment_data["author"]
+            author = comment_data.get("author")
+            if author and author != "[deleted]":
+                if author not in user_stats:
+                    user_stats[author] = {
+                        "comment_count": 0,
+                        "total_score": 0,
+                        "avg_score": 0,
+                        "highest_score": 0,
+                    }
                 
-                # Update comment count
+                score = comment_data.get("score", 0)
                 user_stats[author]["comment_count"] += 1
-                
-                # Update score
-                if "score" in comment_data:
-                    user_stats[author]["total_score"] += comment_data["score"]
+                user_stats[author]["total_score"] += score
+                user_stats[author]["avg_score"] = user_stats[author]["total_score"] / user_stats[author]["comment_count"]
+                user_stats[author]["highest_score"] = max(user_stats[author]["highest_score"], score)
             
             if "replies" in comment_data:
-                self._process_comments_for_contributors(comment_data["replies"], user_stats) 
+                self._process_comments_for_contributors(comment_data["replies"], user_stats)
+    
+    def evaluate_submission_quality(self, submission: Submission) -> float:
+        """
+        Evaluate the quality of a submission for engagement.
+        
+        Args:
+            submission (Submission): The submission to evaluate
+            
+        Returns:
+            float: Quality score between 0 and 100
+        """
+        score = 0
+        
+        # Age factor: prefer posts between 1-12 hours old (fresher but with some traction)
+        post_age_hours = (datetime.datetime.now().timestamp() - submission.created_utc) / 3600
+        if 1 <= post_age_hours <= 4:
+            score += 30  # Optimal age range
+        elif 4 < post_age_hours <= 12:
+            score += 20  # Good age range
+        elif 12 < post_age_hours <= 24:
+            score += 10  # Acceptable age range
+        
+        # Comment count factor: prefer posts with good discussion but not overwhelmed
+        if 5 <= submission.num_comments <= 50:
+            score += 30  # Optimal comment range
+        elif 50 < submission.num_comments <= 200:
+            score += 20  # Good comment range
+        elif submission.num_comments > 200:
+            score += 10  # Lots of comments, harder to stand out
+        elif submission.num_comments > 0:
+            score += 5   # At least some comments
+        
+        # Score factor: prefer posts with positive engagement
+        if submission.score >= 100:
+            score += 20  # Well-received post
+        elif submission.score >= 20:
+            score += 15  # Positively received
+        elif submission.score >= 5:
+            score += 10  # Some positive reception
+        elif submission.score >= 1:
+            score += 5   # At least not downvoted
+        
+        # Question factor: posts with questions are good for engagement
+        if "?" in submission.title or "?" in submission.selftext:
+            score += 10
+        
+        # Content factor: prefer posts with substantial content
+        if len(submission.selftext) > 500:
+            score += 10  # Detailed post
+        elif len(submission.selftext) > 100:
+            score += 5   # Some detail in post
+        
+        return score
+
+    def rank_submissions(self, submissions: List[Submission]) -> List[Tuple[float, Submission]]:
+        """
+        Rank submissions by their engagement potential.
+        
+        Args:
+            submissions (List[Submission]): List of submissions to rank
+            
+        Returns:
+            List[Tuple[float, Submission]]: Submissions ranked by score (descending)
+        """
+        # Evaluate each submission
+        scored_submissions = []
+        for submission in submissions:
+            # Skip submissions that are not relevant (stickied, etc.)
+            if submission.stickied or (hasattr(submission, "distinguished") and submission.distinguished):
+                continue
+                
+            # Skip meta posts
+            title_lower = submission.title.lower()
+            meta_keywords = ["rules", "announcement", "meta", "mod post", "moderator", "subreddit update"]
+            if any(keyword in title_lower for keyword in meta_keywords):
+                continue
+            
+            # Score the submission
+            score = self.evaluate_submission_quality(submission)
+            scored_submissions.append((score, submission))
+        
+        # Sort by score (descending)
+        scored_submissions.sort(key=lambda x: x[0], reverse=True)
+        return scored_submissions 

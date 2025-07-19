@@ -238,6 +238,16 @@ class KarmaAgent:
         Returns:
             bool: True if the post is relevant, False otherwise
         """
+        # Skip stickied posts (announcements, rules, etc.)
+        if submission.stickied:
+            self.logger.info(f"Submission {submission.id} is stickied, skipping")
+            return False
+        
+        # Skip distinguished posts (mod posts)
+        if hasattr(submission, "distinguished") and submission.distinguished:
+            self.logger.info(f"Submission {submission.id} is distinguished, skipping")
+            return False
+            
         # Skip posts that are too old (>24 hours)
         post_age = datetime.datetime.now().timestamp() - submission.created_utc
         if post_age > 86400:  # 86400 seconds = 24 hours
@@ -254,7 +264,12 @@ class KarmaAgent:
             self.logger.info(f"Submission {submission.id} has negative score, skipping")
             return False
         
-        # TODO: Add more relevance criteria as needed
+        # Skip meta posts about rules/announcements based on title keywords
+        title_lower = submission.title.lower()
+        meta_keywords = ["rules", "announcement", "meta", "mod post", "moderator", "subreddit update"]
+        if any(keyword in title_lower for keyword in meta_keywords):
+            self.logger.info(f"Submission {submission.id} appears to be a meta post based on title, skipping")
+            return False
         
         return True
     
