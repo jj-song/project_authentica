@@ -62,8 +62,8 @@ class StandardPromptTemplate(PromptTemplate):
         comments = context["comments"]
         
         # Get comment length stats or use defaults
-        length_stats = context.get("comment_length_stats", {"min_length": 100, "avg_length": 500, "max_length": 800})
-        min_length = length_stats.get("min_length", 100)
+        length_stats = context.get("comment_length_stats", {"min_length": 50, "avg_length": 500, "max_length": 800})
+        min_length = length_stats.get("min_length", 50)
         avg_length = length_stats.get("avg_length", 500)
         max_length = min(1000, int(avg_length * 1.2))
         
@@ -80,6 +80,16 @@ class StandardPromptTemplate(PromptTemplate):
         
         comment_context = "\n\n".join(comment_texts) if comment_texts else "No comments yet."
         
+        # Add representative comments from the subreddit if available
+        representative_comment_texts = []
+        representative_comments = context.get("representative_comments", [])
+        if representative_comments:
+            representative_comment_texts.append("Here are some typical comments from this subreddit:")
+            for i, comment in enumerate(representative_comments[:3]):  # Limit to 3 examples
+                representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
+        
+        representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
+        
         # Generate the prompt
         prompt = f"""
 You are writing a comment on a Reddit post in r/{subreddit["name"]}, which is about {subreddit["description"]}.
@@ -90,7 +100,16 @@ Content: {submission["body"]}
 
 Here are the top comments on this post so far:
 {comment_context}
+"""
 
+        # Add representative comments if available
+        if representative_comment_context:
+            prompt += f"""
+
+{representative_comment_context}
+"""
+
+        prompt += f"""
 Write a helpful, informative comment that:
 1. Feels natural and conversational, like a real human Redditor
 2. Avoids overly formal or structured language
@@ -102,8 +121,9 @@ Your comment should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
 - Sound too perfect or polished
 - Use bullet points or numbered lists unless absolutely necessary
-- Exceed {target_length}-{max_length} characters (aim for natural flow rather than exact length)
 - Include usernames or direct references like "u/username"
+
+Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -134,8 +154,8 @@ class DirectSubmissionReplyTemplate(PromptTemplate):
         comments = context["comments"]
         
         # Get comment length stats or use defaults
-        length_stats = context.get("comment_length_stats", {"min_length": 100, "avg_length": 500, "max_length": 800})
-        min_length = length_stats.get("min_length", 100)
+        length_stats = context.get("comment_length_stats", {"min_length": 50, "avg_length": 500, "max_length": 800})
+        min_length = length_stats.get("min_length", 50)
         avg_length = length_stats.get("avg_length", 500)
         max_length = min(1000, int(avg_length * 1.2))
         
@@ -152,6 +172,16 @@ class DirectSubmissionReplyTemplate(PromptTemplate):
         
         comment_context = "\n\n".join(comment_texts) if comment_texts else "No comments yet."
         
+        # Add representative comments from the subreddit if available
+        representative_comment_texts = []
+        representative_comments = context.get("representative_comments", [])
+        if representative_comments:
+            representative_comment_texts.append("Here are some typical comments from this subreddit:")
+            for i, comment in enumerate(representative_comments[:3]):  # Limit to 3 examples
+                representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
+        
+        representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
+        
         # Generate the prompt
         prompt = f"""
 You are writing a top-level comment on a Reddit post in r/{subreddit["name"]}.
@@ -162,7 +192,16 @@ Content: {submission["body"]}
 
 Some existing comments for context:
 {comment_context}
+"""
 
+        # Add representative comments if available
+        if representative_comment_context:
+            prompt += f"""
+
+{representative_comment_context}
+"""
+
+        prompt += f"""
 Write a helpful, informative comment that:
 1. Directly addresses the original post
 2. Feels natural and conversational, like a real human Redditor
@@ -174,8 +213,9 @@ Your comment should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
 - Sound too perfect or polished
 - Use bullet points or numbered lists unless absolutely necessary
-- Exceed {target_length}-{max_length} characters (aim for natural flow rather than exact length)
 - Include usernames or direct references like "u/username"
+
+Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -237,8 +277,8 @@ class SubredditSpecificTemplate(PromptTemplate):
         comments = context["comments"]
         
         # Get comment length stats or use defaults
-        length_stats = context.get("comment_length_stats", {"min_length": 100, "avg_length": 500, "max_length": 800})
-        min_length = length_stats.get("min_length", 100)
+        length_stats = context.get("comment_length_stats", {"min_length": 50, "avg_length": 500, "max_length": 800})
+        min_length = length_stats.get("min_length", 50)
         avg_length = length_stats.get("avg_length", 500)
         max_length = min(1000, int(avg_length * 1.2))
         
@@ -259,6 +299,16 @@ class SubredditSpecificTemplate(PromptTemplate):
         
         comment_context = "\n\n".join(comment_texts) if comment_texts else "No comments yet."
         
+        # Add representative comments from the subreddit if available
+        representative_comment_texts = []
+        representative_comments = context.get("representative_comments", [])
+        if representative_comments:
+            representative_comment_texts.append("Here are some typical comments from this subreddit:")
+            for i, comment in enumerate(representative_comments[:3]):  # Limit to 3 examples
+                representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
+        
+        representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
+        
         # Generate the prompt
         prompt = f"""
 You are writing a comment on a Reddit post in r/{subreddit["name"]}, which is about {subreddit["description"]}.
@@ -269,7 +319,16 @@ Content: {submission["body"]}
 
 Here are the top comments on this post so far:
 {comment_context}
+"""
 
+        # Add representative comments if available
+        if representative_comment_context:
+            prompt += f"""
+
+{representative_comment_context}
+"""
+
+        prompt += f"""
 For r/{subreddit["name"]}, you should adopt a {style["tone"]} tone and a {style["style"]} style.
 {style["special_instructions"]}
 
@@ -284,8 +343,9 @@ Your comment should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
 - Sound too perfect or polished
 - Use bullet points or numbered lists unless absolutely necessary
-- Exceed {target_length}-{max_length} characters (aim for natural flow rather than exact length)
 - Include usernames or direct references like "u/username"
+
+Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -303,29 +363,24 @@ class PersonaBasedTemplate(PromptTemplate):
     # Dictionary of personas
     PERSONAS = {
         "helpful_expert": {
-            "description": "You are a knowledgeable expert in the subject matter, sharing insights in a helpful way.",
+            "description": "You are knowledgeable about the subject matter, sharing insights in a helpful way.",
             "tone": "informative but approachable",
-            "quirks": "Occasionally uses field-specific terminology but explains it well."
+            "quirks": "Occasionally uses field-specific terminology but explains it clearly."
         },
         "casual_enthusiast": {
-            "description": "You are an enthusiastic hobbyist who loves discussing this topic.",
-            "tone": "excited and casual",
-            "quirks": "Uses exclamation points and expresses genuine excitement. Shares personal anecdotes."
+            "description": "You are interested in this topic and enjoy discussing it.",
+            "tone": "casual and conversational",
+            "quirks": "Sometimes shares relevant personal experiences when appropriate."
         },
         "thoughtful_advisor": {
-            "description": "You are a thoughtful advisor who carefully considers all angles before responding.",
+            "description": "You consider different angles before responding.",
             "tone": "balanced and considerate",
-            "quirks": "Often acknowledges multiple perspectives and nuances."
+            "quirks": "Acknowledges different perspectives in the discussion."
         },
         "friendly_neighbor": {
-            "description": "You are like a friendly neighbor offering advice over the fence.",
+            "description": "You're like someone offering advice over the fence.",
             "tone": "warm and conversational",
-            "quirks": "Uses folksy expressions and friendly language. Offers practical advice."
-        },
-        "curious_questioner": {
-            "description": "You are someone who asks thoughtful questions while providing insights.",
-            "tone": "inquisitive and engaging",
-            "quirks": "Asks rhetorical questions. Encourages deeper thinking."
+            "quirks": "Uses straightforward language and offers practical advice."
         }
     }
     
@@ -354,8 +409,8 @@ class PersonaBasedTemplate(PromptTemplate):
         comments = context["comments"]
         
         # Get comment length stats or use defaults
-        length_stats = context.get("comment_length_stats", {"min_length": 100, "avg_length": 500, "max_length": 800})
-        min_length = length_stats.get("min_length", 100)
+        length_stats = context.get("comment_length_stats", {"min_length": 50, "avg_length": 500, "max_length": 800})
+        min_length = length_stats.get("min_length", 50)
         avg_length = length_stats.get("avg_length", 500)
         max_length = min(1000, int(avg_length * 1.2))
         
@@ -379,6 +434,16 @@ class PersonaBasedTemplate(PromptTemplate):
         
         comment_context = "\n\n".join(comment_texts) if comment_texts else "No comments yet."
         
+        # Add representative comments from the subreddit if available
+        representative_comment_texts = []
+        representative_comments = context.get("representative_comments", [])
+        if representative_comments:
+            representative_comment_texts.append("Here are some typical comments from this subreddit:")
+            for i, comment in enumerate(representative_comments[:3]):  # Limit to 3 examples
+                representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
+        
+        representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
+        
         # Generate the prompt
         prompt = f"""
 {persona["description"]}
@@ -391,7 +456,16 @@ Content: {submission["body"]}
 
 Here are the top comments on this post so far:
 {comment_context}
+"""
 
+        # Add representative comments if available
+        if representative_comment_context:
+            prompt += f"""
+
+{representative_comment_context}
+"""
+
+        prompt += f"""
 Write a comment with a {persona["tone"]} tone.
 {persona["quirks"]}
 
@@ -406,8 +480,9 @@ Your comment should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
 - Sound too perfect or polished
 - Use bullet points or numbered lists unless absolutely necessary
-- Exceed {target_length}-{max_length} characters (aim for natural flow rather than exact length)
 - Include usernames or direct references like "u/username"
+
+Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -507,8 +582,8 @@ class ContentTypeTemplate(PromptTemplate):
         comments = context["comments"]
         
         # Get comment length stats or use defaults
-        length_stats = context.get("comment_length_stats", {"min_length": 100, "avg_length": 500, "max_length": 800})
-        min_length = length_stats.get("min_length", 100)
+        length_stats = context.get("comment_length_stats", {"min_length": 50, "avg_length": 500, "max_length": 800})
+        min_length = length_stats.get("min_length", 50)
         avg_length = length_stats.get("avg_length", 500)
         max_length = min(1000, int(avg_length * 1.2))
         
@@ -542,6 +617,16 @@ class ContentTypeTemplate(PromptTemplate):
         
         comment_context = "\n\n".join(comment_texts) if comment_texts else "No comments yet."
         
+        # Add representative comments from the subreddit if available
+        representative_comment_texts = []
+        representative_comments = context.get("representative_comments", [])
+        if representative_comments:
+            representative_comment_texts.append("Here are some typical comments from this subreddit:")
+            for i, comment in enumerate(representative_comments[:3]):  # Limit to 3 examples
+                representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
+        
+        representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
+        
         # Generate the prompt
         prompt = f"""
 You are writing a comment on a Reddit post in r/{subreddit["name"]}.
@@ -555,7 +640,16 @@ Content type: {content_type}
 
 Here are the top comments on this post so far:
 {comment_context}
+"""
 
+        # Add representative comments if available
+        if representative_comment_context:
+            prompt += f"""
+
+{representative_comment_context}
+"""
+
+        prompt += f"""
 Write a helpful, informative comment that:
 1. Feels natural and conversational, like a real human Redditor
 2. Avoids overly formal or structured language
@@ -567,8 +661,9 @@ Your comment should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
 - Sound too perfect or polished
 - Use bullet points or numbered lists unless absolutely necessary
-- Exceed {target_length}-{max_length} characters (aim for natural flow rather than exact length)
 - Include usernames or direct references like "u/username"
+
+Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -603,8 +698,8 @@ class CommentReplyTemplate(PromptTemplate):
             return DirectSubmissionReplyTemplate().generate(context)
         
         # Get comment length stats or use defaults
-        length_stats = context.get("comment_length_stats", {"min_length": 100, "avg_length": 500, "max_length": 800})
-        min_length = length_stats.get("min_length", 100)
+        length_stats = context.get("comment_length_stats", {"min_length": 50, "avg_length": 500, "max_length": 800})
+        min_length = length_stats.get("min_length", 50)
         avg_length = length_stats.get("avg_length", 500)
         max_length = min(1000, int(avg_length * 1.2))
         
@@ -635,6 +730,16 @@ class CommentReplyTemplate(PromptTemplate):
         else:
             author_context = "This comment was written by someone other than the original poster."
         
+        # Add representative comments from the subreddit if available
+        representative_comment_texts = []
+        representative_comments = context.get("representative_comments", [])
+        if representative_comments:
+            representative_comment_texts.append("Here are some typical comments from this subreddit:")
+            for i, comment in enumerate(representative_comments[:2]):  # Limit to 2 examples for replies
+                representative_comment_texts.append(f"Example {i+1} (Score: {comment['score']}):\n{comment['body']}")
+        
+        representative_comment_context = "\n\n".join(representative_comment_texts) if representative_comment_texts else ""
+        
         # Generate the prompt
         prompt = f"""
 You are replying to a comment on a Reddit post in r/{subreddit["name"]}.
@@ -650,7 +755,16 @@ Be aware of the relationship between the comment and the original post, but focu
 
 You are specifically replying to this comment:
 "{comment_body}"
+"""
 
+        # Add representative comments if available
+        if representative_comment_context:
+            prompt += f"""
+
+{representative_comment_context}
+"""
+
+        prompt += f"""
 Write a natural, conversational reply that:
 1. Directly addresses the specific points or questions in the comment
 2. Maintains a friendly, helpful tone
@@ -662,9 +776,10 @@ Your reply should NOT:
 - Start with phrases like "As an AI" or "Here's my response"
 - Sound too perfect or polished
 - Use bullet points or numbered lists unless absolutely necessary
-- Exceed {target_length}-{max_length} characters (aim for natural flow rather than exact length)
 - Repeat the same points already made in the comment
 - Include usernames or direct references like "u/username"
+
+Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the reply text directly, without any additional formatting or explanation.
 """
