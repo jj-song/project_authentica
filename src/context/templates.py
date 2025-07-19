@@ -123,7 +123,7 @@ Your comment should NOT:
 - Use bullet points or numbered lists unless absolutely necessary
 - Include usernames or direct references like "u/username"
 
-Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
+Your comment should be between {min_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -215,7 +215,7 @@ Your comment should NOT:
 - Use bullet points or numbered lists unless absolutely necessary
 - Include usernames or direct references like "u/username"
 
-Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
+Your comment should be between {min_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -345,7 +345,7 @@ Your comment should NOT:
 - Use bullet points or numbered lists unless absolutely necessary
 - Include usernames or direct references like "u/username"
 
-Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
+Your comment should be between {min_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -482,7 +482,7 @@ Your comment should NOT:
 - Use bullet points or numbered lists unless absolutely necessary
 - Include usernames or direct references like "u/username"
 
-Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
+Your comment should be between {min_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -663,7 +663,7 @@ Your comment should NOT:
 - Use bullet points or numbered lists unless absolutely necessary
 - Include usernames or direct references like "u/username"
 
-Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
+Your comment should be between {min_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the comment text directly, without any additional formatting or explanation.
 """
@@ -779,7 +779,7 @@ Your reply should NOT:
 - Repeat the same points already made in the comment
 - Include usernames or direct references like "u/username"
 
-Your comment should be between {target_length} and {max_length} characters (aim for natural flow rather than exact length).
+Your comment should be between {min_length} and {max_length} characters (aim for natural flow rather than exact length).
 
 Just write the reply text directly, without any additional formatting or explanation.
 """
