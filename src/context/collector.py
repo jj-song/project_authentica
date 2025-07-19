@@ -6,6 +6,7 @@ Collects and processes context information for prompt engineering.
 
 import logging
 import datetime
+import random
 from typing import Dict, Any, Optional, List, Tuple
 
 import praw
@@ -39,6 +40,8 @@ class ContextCollector:
         """
         self.reddit = reddit_instance
         self.subreddit_cache = {}  # Cache for subreddit information
+        self.comment_length_cache = {}  # Cache for comment length analysis
+        self.representative_comments_cache = {}  # Cache for representative comments
     
     def collect_context(self, submission: Submission, max_comments: int = 10) -> Dict[str, Any]:
         """
@@ -60,6 +63,19 @@ class ContextCollector:
             "comments": self._get_comments_context(submission, max_comments),
             "temporal": self._get_temporal_context(),
         }
+        
+        # Add comment length statistics
+        subreddit_name = submission.subreddit.display_name
+        if subreddit_name not in self.comment_length_cache:
+            self.comment_length_cache[subreddit_name] = self.analyze_subreddit_comment_lengths(subreddit_name)
+        
+        context["comment_length_stats"] = self.comment_length_cache[subreddit_name]
+        
+        # Add representative comments from the subreddit
+        if subreddit_name not in self.representative_comments_cache:
+            self.representative_comments_cache[subreddit_name] = self.get_representative_comments(subreddit_name)
+        
+        context["representative_comments"] = self.representative_comments_cache[subreddit_name]
         
         return context
     
@@ -172,6 +188,131 @@ class ContextCollector:
             "day_of_week": now.strftime("%A"),
             "hour_of_day": now.hour,
             "is_weekend": now.weekday() >= 5,  # 5 = Saturday, 6 = Sunday
+        }
+    
+    def analyze_subreddit_comment_lengths(self, subreddit_name: str, sample_size: int = 10) -> Dict[str, int]:
+        """
+        Analyze the typical comment lengths in a subreddit.
+        
+        Args:
+            subreddit_name (str): Name of the subreddit to analyze
+            sample_size (int): Number of comments to sample
+            
+        Returns:
+            Dict[str, int]: Statistics about comment lengths including average and median
+        """
+        logger.info(f"Analyzing comment lengths in r/{subreddit_name}")
+        
+        subreddit = self.reddit.subreddit(subreddit_name)
+        comments = []
+        
+        try:
+            # Collect comments from hot submissions
+            for submission in subreddit.hot(limit=3):
+                submission.comments.replace_more(limit=0)
+                for comment in submission.comments:
+                    if len(comments) >= sample_size:
+                        break
+                    if hasattr(comment, "body") and comment.body:
+                        comments.append(len(comment.body))
+                if len(comments) >= sample_size:
+                    break
+        except Exception as e:
+            logger.warning(f"Error sampling comment lengths in r/{subreddit_name}: {str(e)}")
+        
+        if not comments:
+            logger.info(f"No comments found in r/{subreddit_name}, using default values")
+            return {"min_length": 50, "avg_length": 500, "max_length": 800, "median_length": 400}
+        
+        # Calculate statistics
+        avg_length = int(sum(comments) / len(comments))
+        min_length = max(50, min(comments))  # At least 50 characters min
+        max_length = min(1000, max(800, max(comments)))  # At most 1000 characters max
+        median_length = sorted(comments)[len(comments) // 2]
+        
+        logger.info(f"Comment length analysis for r/{subreddit_name}: avg={avg_length}, min={min_length}, max={max_length}, median={median_length}")
+        
+        return {
+            "min_length": min_length,
+            "avg_length": avg_length,
+            "max_length": max_length,
+            "median_length": median_length
+        }
+    
+    def get_representative_comments(self, subreddit_name: str, sample_size: int = 5) -> List[Dict[str, Any]]:
+        """
+        Get representative comment examples from a subreddit to show typical communication style.
+        
+        Args:
+            subreddit_name (str): Name of the subreddit to analyze
+            sample_size (int): Number of comments to sample
+            
+        Returns:
+            List[Dict[str, Any]]: List of representative comments
+        """
+        logger.info(f"Getting representative comments from r/{subreddit_name}")
+        
+        representative_comments = []
+        subreddit = self.reddit.subreddit(subreddit_name)
+        
+        try:
+            # Get comments from hot submissions
+            for submission in subreddit.hot(limit=3):
+                if len(representative_comments) >= sample_size:
+                    break
+                
+                submission.comments.replace_more(limit=0)
+                comments = sorted(submission.comments, key=lambda c: c.score if hasattr(c, "score") else 0, reverse=True)
+                
+                for comment in comments[:5]:  # Take top 5 comments from each submission
+                    if len(representative_comments) >= sample_size:
+                        break
+                    
+                    if hasattr(comment, "body") and comment.body and len(comment.body) > 20:
+                        # Only include comments with reasonable length and good score
+                        if hasattr(comment, "score") and comment.score > 5 and len(comment.body) < 500:
+                            representative_comments.append({
+                                "body": comment.body,
+                                "score": comment.score
+                            })
+        except Exception as e:
+            logger.warning(f"Error getting representative comments from r/{subreddit_name}: {str(e)}")
+        
+        return representative_comments
+    
+    def analyze_comment_context(self, submission: Submission, comment: Comment) -> Dict[str, Any]:
+        """
+        Analyze the context of a comment in relation to the original post.
+        
+        Args:
+            submission (Submission): The original submission
+            comment (Comment): The comment being replied to
+            
+        Returns:
+            Dict[str, Any]: Analysis of the comment's relationship to the original post
+        """
+        # Determine if this is a top-level comment or a nested reply
+        is_top_level = comment.parent_id.startswith('t3_')  # t3_ prefix indicates parent is a submission
+        
+        # Get comment depth
+        depth = 0
+        if hasattr(comment, "depth"):
+            depth = comment.depth
+        
+        # Analyze if the comment directly addresses the original post
+        addresses_original_content = False
+        if submission.selftext:
+            # Simple heuristic - check if any 5+ character sequence from the original post appears in the comment
+            for i in range(len(submission.selftext) - 5):
+                if submission.selftext[i:i+5] in comment.body and len(submission.selftext[i:i+5].strip()) >= 5:
+                    addresses_original_content = True
+                    break
+        
+        return {
+            "is_top_level": is_top_level,
+            "depth": depth,
+            "addresses_original_content": addresses_original_content,
+            "is_op": comment.is_submitter
         }
 
 
