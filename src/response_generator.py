@@ -13,7 +13,7 @@ from src.context.collector import ContextCollector
 from src.thread_analysis.analyzer import ThreadAnalyzer
 from src.thread_analysis.strategies import ResponseStrategy
 from src.context.templates import TemplateSelector
-from src.utils.logging_utils import get_component_logger
+from src.utils.logging_utils import get_component_logger, log_llm_interaction, log_prompt_metrics
 from src.utils.error_utils import handle_exceptions
 
 
@@ -127,8 +127,36 @@ class ResponseGenerator:
         self.logger.info("Calling LLM for final response generation...")
         from src.llm_handler import call_openai_api, clean_response
         
+        # Log prompt metrics
+        subreddit_name = submission.subreddit.display_name
+        strategy_name = getattr(response_strategy, 'strategy', getattr(response_strategy, 'type', str(response_strategy)))
+        template_name = template.__class__.__name__
+        
+        prompt_metrics = log_prompt_metrics(
+            prompt=prompt,
+            subreddit=subreddit_name,
+            strategy=strategy_name,
+            template=template_name,
+            logger=self.logger
+        )
+        
         raw_response = call_openai_api(prompt, verbose)
         response_text = clean_response(raw_response)
+        
+        # Log the complete LLM interaction
+        log_llm_interaction(
+            prompt=prompt,
+            response=response_text,
+            subreddit=subreddit_name,
+            strategy=strategy_name,
+            template=template_name,
+            metadata={
+                "submission_id": submission.id,
+                "comment_id": target_comment.id if target_comment else None,
+                "verbose": verbose,
+                **prompt_metrics
+            }
+        )
         
         # Create response data
         response_data = {
