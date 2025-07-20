@@ -119,9 +119,16 @@ class ResponseGenerator:
                 "context_analysis": comment_context
             }
         
-        # Step 5: Generate response
-        self.logger.info("Generating response text...")
-        response_text = self.template_selector.generate_with_variations(context, variation_count, target_comment)
+        # Step 5: Generate response prompt
+        self.logger.info("Generating response prompt...")
+        prompt = self.template_selector.generate_with_variations(context, variation_count, target_comment)
+        
+        # Step 6: Call LLM to generate final response
+        self.logger.info("Calling LLM for final response generation...")
+        from src.llm_handler import call_openai_api, clean_response
+        
+        raw_response = call_openai_api(prompt, verbose)
+        response_text = clean_response(raw_response)
         
         # Create response data
         response_data = {

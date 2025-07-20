@@ -12,6 +12,9 @@ from typing import Dict, Any, Optional, List, Tuple
 import praw
 from praw.models import Submission, Comment, Subreddit
 
+from src.humanization.sampler import CommentSampler
+from src.database import get_db_connection
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +45,10 @@ class ContextCollector:
         self.subreddit_cache = {}  # Cache for subreddit information
         self.comment_length_cache = {}  # Cache for comment length analysis
         self.representative_comments_cache = {}  # Cache for representative comments
+        
+        # Initialize CommentSampler for humanization features
+        self.db_connection = get_db_connection()
+        self.comment_sampler = CommentSampler(reddit_instance, self.db_connection)
     
     def collect_context(self, submission: Submission, max_comments: int = 10) -> Dict[str, Any]:
         """
@@ -71,9 +78,11 @@ class ContextCollector:
         
         context["comment_length_stats"] = self.comment_length_cache[subreddit_name]
         
-        # Add representative comments from the subreddit
+        # Add representative comments from the subreddit using CommentSampler
         if subreddit_name not in self.representative_comments_cache:
-            self.representative_comments_cache[subreddit_name] = self.get_representative_comments(subreddit_name)
+            self.representative_comments_cache[subreddit_name] = self.comment_sampler.get_representative_samples(
+                subreddit_name, context, count=5
+            )
         
         context["representative_comments"] = self.representative_comments_cache[subreddit_name]
         
@@ -239,46 +248,14 @@ class ContextCollector:
             "median_length": median_length
         }
     
+    # DEPRECATED: This method has been replaced by CommentSampler.get_representative_samples()
+    # The CommentSampler provides more sophisticated comment collection with database caching
     def get_representative_comments(self, subreddit_name: str, sample_size: int = 5) -> List[Dict[str, Any]]:
         """
-        Get representative comment examples from a subreddit to show typical communication style.
-        
-        Args:
-            subreddit_name (str): Name of the subreddit to analyze
-            sample_size (int): Number of comments to sample
-            
-        Returns:
-            List[Dict[str, Any]]: List of representative comments
+        DEPRECATED: Use CommentSampler.get_representative_samples() instead.
         """
-        logger.info(f"Getting representative comments from r/{subreddit_name}")
-        
-        representative_comments = []
-        subreddit = self.reddit.subreddit(subreddit_name)
-        
-        try:
-            # Get comments from hot submissions
-            for submission in subreddit.hot(limit=3):
-                if len(representative_comments) >= sample_size:
-                    break
-                
-                submission.comments.replace_more(limit=0)
-                comments = sorted(submission.comments, key=lambda c: c.score if hasattr(c, "score") else 0, reverse=True)
-                
-                for comment in comments[:5]:  # Take top 5 comments from each submission
-                    if len(representative_comments) >= sample_size:
-                        break
-                    
-                    if hasattr(comment, "body") and comment.body and len(comment.body) > 20:
-                        # Only include comments with reasonable length and good score
-                        if hasattr(comment, "score") and comment.score > 5 and len(comment.body) < 500:
-                            representative_comments.append({
-                                "body": comment.body,
-                                "score": comment.score
-                            })
-        except Exception as e:
-            logger.warning(f"Error getting representative comments from r/{subreddit_name}: {str(e)}")
-        
-        return representative_comments
+        logger.warning("get_representative_comments is deprecated - using CommentSampler instead")
+        return self.comment_sampler.get_representative_samples(subreddit_name, {}, count=sample_size)
     
     def analyze_comment_context(self, submission: Submission, comment: Comment) -> Dict[str, Any]:
         """

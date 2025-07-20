@@ -22,11 +22,8 @@ from praw.exceptions import PRAWException, APIException, ClientException
 from src.database import get_db_connection, initialize_database
 from src.config import get_reddit_instance, init_configuration
 from src.agent import KarmaAgent
-from src.context.collector import ContextCollector
-from src.context.templates import TemplateSelector, VariationEngine
-from src.llm_handler import generate_comment_from_submission
+from src.response_generator import ResponseGenerator
 from src.thread_analysis.analyzer import ThreadAnalyzer
-from src.thread_analysis.strategies import ResponseStrategy
 
 # Get configuration
 config = init_configuration()
@@ -118,9 +115,10 @@ def run_once(subreddit_name, post_limit=10, sort='hot', verbose=False):
                 logger.error(f"Authentication error: {str(e)}")
                 raise
         
-        # Initialize KarmaAgent
+        # Initialize KarmaAgent and ResponseGenerator
         karma_agent = KarmaAgent(reddit, db_conn)
-        logger.info("KarmaAgent initialized")
+        response_generator = ResponseGenerator(reddit)
+        logger.info("KarmaAgent and ResponseGenerator initialized")
         
         # Find a suitable post in the subreddit
         logger.info(f"Finding a suitable post in r/{subreddit_name}...")
@@ -165,58 +163,35 @@ def run_once(subreddit_name, post_limit=10, sort='hot', verbose=False):
             logger.info(f"Processing post with quality score {score:.2f}: '{post.title}'")
             selected_post = post
             
-            # Collect context
-            collector = ContextCollector(reddit)
-            context = collector.collect_context(selected_post)
+            # Use ResponseGenerator for the entire pipeline
+            logger.info("Generating response using ResponseGenerator pipeline...")
+            response_data = response_generator.generate_response(
+                submission=selected_post,
+                variation_count=2,
+                verbose=verbose
+            )
             
-            # Analyze the thread
-            thread_analysis = thread_analyzer.analyze_thread(selected_post)
-
-            # Determine response strategy
-            strategy = ResponseStrategy()
-            response_strategy = strategy.determine_strategy(thread_analysis, context)
-
-            # Select a template
-            template_selector = TemplateSelector()
-            template = template_selector.select_template(response_strategy, context)
-
-            # Select variations
-            variations = VariationEngine.get_random_variations(2)  # Select 2 random variations
-
-            # Log the selected strategy and template
-            logger.info(f"\n=== SELECTED RESPONSE STRATEGY ===\n")
-            logger.info(f"Strategy type: {response_strategy['type']}")
-            logger.info(f"Reasoning: {response_strategy['reasoning']}")
-            if response_strategy.get('target_comment'):
-                logger.info(f"Target comment: {response_strategy['target_comment'].get('id')} by {response_strategy['target_comment'].get('author')}")
-            elif response_strategy.get('target'):
-                logger.info(f"Target: {response_strategy['target']}")
-
-            logger.info(f"\n=== TEMPLATE SELECTION ===\n")
-            logger.info(f"Selected Template: {template.__class__.__name__}")
-
-            logger.info(f"\n=== SELECTED VARIATIONS ===\n")
-            for i, variation in enumerate(variations, 1):
-                logger.info(f"Variation {i}: {variation}")
+            comment_text = response_data["text"]
+            target_comment_id = response_data.get("comment_id")
             
-            # Determine which comment to reply to
+            # Find the target comment if one was selected
             target_comment = None
-            if response_strategy.get('target_comment'):
-                # Find the comment in the submission
+            if target_comment_id:
                 for comment in selected_post.comments.list():
-                    if hasattr(comment, "id") and comment.id == response_strategy['target_comment'].get("id"):
+                    if hasattr(comment, "id") and comment.id == target_comment_id:
                         target_comment = comment
                         break
             
-            # Generate a comment
-            logger.info("Generating comment...")
-            comment_text = generate_comment_from_submission(
-                selected_post, 
-                reddit, 
-                variation_count=2, 
-                comment_to_reply=target_comment,
-                verbose=verbose
-            )
+            # Log the response details
+            if verbose:
+                logger.info(f"\n=== RESPONSE DETAILS ===")
+                logger.info(f"Strategy: {response_data['strategy']['type']}")
+                logger.info(f"Reasoning: {response_data['strategy']['reasoning']}")
+                logger.info(f"Template: {response_data['template']}")
+                if target_comment:
+                    logger.info(f"Target comment: {target_comment.id} by u/{target_comment.author}")
+                else:
+                    logger.info("Target: Direct reply to submission")
             
             # Post the comment
             if not config["runtime"]["dry_run"]:
@@ -234,6 +209,7 @@ def run_once(subreddit_name, post_limit=10, sort='hot', verbose=False):
                 print(comment_text)
             
             logger.info("Run completed successfully!")
+            processed_count += 1
             
     except Exception as e:
         logger.error(f"Error: {str(e)}")
@@ -430,46 +406,37 @@ def show_submission_context(submission_id, verbose=False):
         
         print(f"\nCollecting context for submission: {submission.title}")
         
-        # Create context collector and collect context
-        collector = ContextCollector(reddit)
-        context = collector.collect_context(submission)
+        # Use ResponseGenerator to show the complete pipeline process
+        response_generator = ResponseGenerator(reddit)
+        response_data = response_generator.generate_response(
+            submission=submission,
+            variation_count=2,
+            verbose=True  # This will show detailed context in the response_data
+        )
         
-        # Print the context in a readable format
-        print("\n=== COLLECTED CONTEXT ===\n")
-        print(json.dumps(context, indent=2))
+        # Print the response details
+        print("\n=== RESPONSE GENERATION DETAILS ===\n")
+        print(f"Strategy Type: {response_data['strategy']['type']}")
+        print(f"Strategy Reasoning: {response_data['strategy']['reasoning']}")
+        print(f"Selected Template: {response_data['template']}")
+        if response_data.get('comment_id'):
+            print(f"Target Comment ID: {response_data['comment_id']}")
+        else:
+            print("Target: Direct reply to submission")
         
-        # Show what templates would be selected
-        selector = TemplateSelector()
-        template = selector.select_template(context)
-        
-        print(f"\n=== SELECTED TEMPLATE ===\n")
-        print(f"Template type: {template.__class__.__name__}")
-        
-        # Show what variations would be applied
-        variations = VariationEngine.get_random_variations(2)
-        
-        print(f"\n=== SELECTED VARIATIONS ===\n")
-        for i, variation in enumerate(variations, 1):
-            print(f"Variation {i}: {variation}")
-        
-        # If thread analysis is enabled, show the analysis results
-        if config["features"]["thread_analysis"] and verbose:
-            print(f"\n=== THREAD ANALYSIS ===\n")
-            thread_analyzer = ThreadAnalyzer(reddit)
-            thread_analysis = thread_analyzer.analyze_thread(submission)
-            
-            print("Thread Analysis Results:")
-            print(f"- Comment Count: {thread_analysis.get('comment_count', 'N/A')}")
-            print(f"- Thread Depth: {thread_analysis.get('thread_depth', 'N/A')}")
-            print(f"- Key Topics: {', '.join(thread_analysis.get('key_topics', []))}")
-            
-            # Show response strategy
-            strategy = ResponseStrategy()
-            response_strategy = strategy.determine_strategy(thread_analysis, context)
-            
-            print(f"\nResponse Strategy:")
-            print(f"- Type: {response_strategy.get('type', 'N/A')}")
-            print(f"- Reasoning: {response_strategy.get('reasoning', 'N/A')}")
+        # Show context if available (verbose mode)
+        if response_data.get('context') and verbose:
+            print("\n=== COLLECTED CONTEXT ===\n")
+            context = response_data['context']
+            # Print key context elements without overwhelming output
+            print(f"Submission: {context['submission']['title']}")
+            print(f"Subreddit: {context['subreddit']['name']}")
+            print(f"Comment Count: {len(context.get('comments', []))}")
+            if context.get('representative_comments'):
+                print(f"Representative Comments: {len(context['representative_comments'])}")
+            if context.get('comment_length_stats'):
+                stats = context['comment_length_stats']
+                print(f"Length Stats - Min: {stats.get('min_length')}, Avg: {stats.get('avg_length')}, Max: {stats.get('max_length')}")
             
     except Exception as e:
         logger.error(f"Error showing context for submission {submission_id}: {str(e)}")
