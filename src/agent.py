@@ -15,6 +15,7 @@ from praw.exceptions import PRAWException, APIException, ClientException
 from praw.models import Submission, Comment
 
 from src.response_generator import ResponseGenerator
+from src.thread_analysis.analyzer import ThreadAnalyzer
 from src.utils.database_utils import ensure_bot_registered
 from src.utils.error_utils import handle_exceptions, RedditAPIError
 from src.utils.logging_utils import get_component_logger
@@ -49,6 +50,9 @@ class KarmaAgent:
         # Initialize ResponseGenerator for orchestrated response generation
         self.response_generator = ResponseGenerator(reddit_instance)
         
+        # Initialize ThreadAnalyzer for quality ranking
+        self.thread_analyzer = ThreadAnalyzer(reddit_instance)
+        
         self.logger.info(f"KarmaAgent initialized for user: {self.username}")
     
     @handle_exceptions
@@ -80,18 +84,19 @@ class KarmaAgent:
             # Get the subreddit
             subreddit = self.reddit.subreddit(subreddit_name)
             
-            # Fetch submissions based on sort type
+            # Fetch more submissions than needed for better selection (like main.py)
+            fetch_limit = post_limit * 3
             if sort == 'hot':
-                submissions = list(subreddit.hot(limit=post_limit))
+                submissions = list(subreddit.hot(limit=fetch_limit))
             elif sort == 'new':
-                submissions = list(subreddit.new(limit=post_limit))
+                submissions = list(subreddit.new(limit=fetch_limit))
             elif sort == 'top':
-                submissions = list(subreddit.top(limit=post_limit))
+                submissions = list(subreddit.top(limit=fetch_limit))
             elif sort == 'rising':
-                submissions = list(subreddit.rising(limit=post_limit))
+                submissions = list(subreddit.rising(limit=fetch_limit))
             else:
                 # Default to hot if an invalid sort is provided
-                submissions = list(subreddit.hot(limit=post_limit))
+                submissions = list(subreddit.hot(limit=fetch_limit))
                 sort = 'hot'
             
             self.logger.info(f"Fetched {len(submissions)} {sort} submissions from r/{subreddit_name}")
@@ -104,9 +109,22 @@ class KarmaAgent:
                 details=f"Fetched {len(submissions)} {sort} posts"
             )
             
-            # Process each submission
-            for submission in submissions:
+            # Use ThreadAnalyzer to rank submissions by quality (matching main.py behavior)
+            ranked_posts = self.thread_analyzer.rank_submissions(submissions)
+            
+            if not ranked_posts:
+                self.logger.error(f"No suitable posts found in r/{subreddit_name}")
+                return
+            
+            # Process the top-ranked posts up to the limit
+            processed_count = 0
+            for score, submission in ranked_posts:
+                if processed_count >= post_limit:
+                    break
+                    
+                self.logger.info(f"Processing post with quality score {score:.2f}: '{submission.title}'")
                 self._process_submission(submission, subreddit_name)
+                processed_count += 1
                 
         except PRAWException as e:
             self.logger.error(f"PRAW error during scan of r/{subreddit_name}: {str(e)}")
@@ -156,25 +174,33 @@ class KarmaAgent:
             )
             return
         
-        # Try to reply to a comment instead of the submission
+        # Use ResponseGenerator for the entire pipeline (matching main.py behavior)
         try:
-            # First try to find a suitable comment to reply to
-            if self._try_reply_to_comment(submission, subreddit_name):
-                return
-            
-            # If no suitable comment found or if reply failed, fall back to replying to the submission
-            self.logger.info(f"No suitable comment found, replying to submission {submission.id}")
-            
-            # Use ResponseGenerator for orchestrated comment generation
+            self.logger.info("Generating response using ResponseGenerator pipeline...")
             response_data = self.response_generator.generate_response(
                 submission=submission,
                 variation_count=2,
                 verbose=False
             )
-            comment_text = response_data["text"]
             
-            # Post the comment using the standardized method
-            comment = self.reply_to_submission(submission, comment_text)
+            comment_text = response_data["text"]
+            target_comment_id = response_data.get("comment_id")
+            
+            # Find the target comment if one was selected by ResponseGenerator
+            target_comment = None
+            if target_comment_id:
+                for comment in submission.comments.list():
+                    if hasattr(comment, "id") and comment.id == target_comment_id:
+                        target_comment = comment
+                        break
+            
+            # Post the comment using the appropriate method
+            if target_comment:
+                self.logger.info(f"Replying to comment by u/{target_comment.author}")
+                comment = self.reply_to_comment(target_comment, comment_text)
+            else:
+                self.logger.info("Replying to submission")
+                comment = self.reply_to_submission(submission, comment_text)
             
             if not comment:
                 self.logger.error(f"Failed to post comment on submission {submission.id}")
@@ -189,58 +215,7 @@ class KarmaAgent:
                 details=f"Unexpected error: {str(e)}"
             )
     
-    def _try_reply_to_comment(self, submission: Submission, subreddit_name: str) -> bool:
-        """
-        Try to find a suitable comment to reply to in the submission.
-        
-        Args:
-            submission (Submission): The Reddit submission
-            subreddit_name (str): Name of the subreddit (for logging purposes)
-            
-        Returns:
-            bool: True if successfully replied to a comment, False otherwise
-        """
-        try:
-            # Replace MoreComments objects to get a flattened comment tree
-            submission.comments.replace_more(limit=0)
-            
-            # Filter for comments that:
-            # 1. Have a positive score
-            # 2. Are not from the bot itself
-            # 3. Have some substance (not too short)
-            eligible_comments = [
-                comment for comment in submission.comments
-                if (comment.score > 0 and 
-                    str(comment.author) != self.username and
-                    len(comment.body) >= 20)
-            ]
-            
-            if not eligible_comments:
-                self.logger.info(f"No eligible comments found in submission {submission.id}")
-                return False
-            
-            # Sort by score and select a comment from the top 3 (if available)
-            eligible_comments.sort(key=lambda c: c.score, reverse=True)
-            top_comments = eligible_comments[:min(3, len(eligible_comments))]
-            selected_comment = random.choice(top_comments)
-            
-            # Generate a reply using ResponseGenerator
-            response_data = self.response_generator.generate_response(
-                submission=submission,
-                comment_to_reply=selected_comment,
-                variation_count=2,
-                verbose=False
-            )
-            comment_text = response_data["text"]
-            
-            # Post the reply using the standardized method
-            reply = self.reply_to_comment(selected_comment, comment_text)
-            
-            return reply is not None
-            
-        except Exception as e:
-            self.logger.error(f"Error finding comment to reply to in {submission.id}: {str(e)}")
-            return False
+    # REMOVED: _try_reply_to_comment method - this logic is now handled by ResponseGenerator's strategy selection
     
     def _is_post_relevant(self, submission: praw.models.Submission) -> bool:
         """
