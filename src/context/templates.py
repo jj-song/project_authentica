@@ -8,6 +8,8 @@ import random
 import logging
 from typing import Dict, Any, List, Optional, Callable
 
+from src.humanization.prompt_enhancer import enhance_prompt
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -946,6 +948,23 @@ class TemplateSelector:
             # Add context note
             if "context_note" in enhancements:
                 base_prompt += f"\n\nAdditional context: {enhancements['context_note']}"
+        
+        # Apply humanization enhancements using prompt enhancer
+        representative_comments = context.get("representative_comments", [])
+        if representative_comments:
+            try:
+                # Create a simplified profile from context for the enhancer
+                subreddit_profile = {
+                    "length": {"char_length": {"mean": context.get("comment_length_stats", {}).get("avg_length", 300)}},
+                    "informality": {"informality_score": 0.6},  # Default moderate informality
+                    "structure": {"paragraph_count": {"mean": 1.5}}
+                }
+                
+                # Enhance the prompt with humanization features
+                base_prompt = enhance_prompt(base_prompt, representative_comments, subreddit_profile, context)
+                logger.info("Applied humanization enhancements to prompt")
+            except Exception as e:
+                logger.warning(f"Failed to apply humanization enhancements: {e}")
         
         # Apply variations
         return VariationEngine.apply_variations(base_prompt, variation_count)

@@ -147,9 +147,12 @@ def clean_response(text: str) -> str:
     return text
 
 
+# This function is deprecated - use ResponseGenerator directly instead
+# Keeping for backward compatibility but will be removed in future versions
 @handle_exceptions
 def generate_comment_from_submission(submission: Submission, reddit_instance: praw.Reddit, variation_count: int = 2, comment_to_reply: Optional[Comment] = None, verbose: bool = False) -> str:
     """
+    DEPRECATED: Use ResponseGenerator directly instead.
     Generate a comment for a Reddit submission using the ResponseGenerator pipeline.
     
     Args:
@@ -162,37 +165,18 @@ def generate_comment_from_submission(submission: Submission, reddit_instance: pr
     Returns:
         str: The generated comment text
     """
-    logger.info(f"Generating comment for submission {submission.id}")
+    logger.warning("generate_comment_from_submission is deprecated - use ResponseGenerator directly")
     
-    try:
-        # Use the ResponseGenerator to create a prompt
-        response_generator = ResponseGenerator(reddit_instance)
-        response_data = response_generator.generate_response(
-            submission=submission,
-            comment_to_reply=comment_to_reply,
-            variation_count=variation_count,
-            verbose=verbose
-        )
-        
-        prompt = response_data["text"]
-        
-        # Call the OpenAI API
-        raw_response = call_openai_api(prompt, verbose)
-        
-        # Clean up the response
-        clean_comment = clean_response(raw_response)
-        
-        if verbose:
-            print("\n=== CLEANED COMMENT ===\n")
-            print(clean_comment)
-        
-        return clean_comment
-    except Exception as e:
-        logger.error(f"Error generating comment: {str(e)}")
-        # Fall back to basic prompt if the pipeline fails
-        basic_prompt = _create_basic_prompt(submission.title, submission.selftext)
-        raw_response = call_openai_api(basic_prompt, verbose)
-        return clean_response(raw_response)
+    # Use ResponseGenerator directly (this is now the proper way)
+    response_generator = ResponseGenerator(reddit_instance)
+    response_data = response_generator.generate_response(
+        submission=submission,
+        comment_to_reply=comment_to_reply,
+        variation_count=variation_count,
+        verbose=verbose
+    )
+    
+    return response_data["text"]
 
 
 def generate_comment(submission_title: str, submission_body: str) -> str:

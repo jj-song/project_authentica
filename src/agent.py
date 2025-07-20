@@ -14,7 +14,7 @@ import praw
 from praw.exceptions import PRAWException, APIException, ClientException
 from praw.models import Submission, Comment
 
-from src.llm_handler import generate_comment, generate_comment_from_submission
+from src.response_generator import ResponseGenerator
 from src.utils.database_utils import ensure_bot_registered
 from src.utils.error_utils import handle_exceptions, RedditAPIError
 from src.utils.logging_utils import get_component_logger
@@ -45,6 +45,9 @@ class KarmaAgent:
         
         # Register bot in database to prevent foreign key constraint failures
         ensure_bot_registered(self.db, self.username)
+        
+        # Initialize ResponseGenerator for orchestrated response generation
+        self.response_generator = ResponseGenerator(reddit_instance)
         
         self.logger.info(f"KarmaAgent initialized for user: {self.username}")
     
@@ -162,8 +165,13 @@ class KarmaAgent:
             # If no suitable comment found or if reply failed, fall back to replying to the submission
             self.logger.info(f"No suitable comment found, replying to submission {submission.id}")
             
-            # Use the new context-aware comment generation
-            comment_text = generate_comment_from_submission(submission, self.reddit)
+            # Use ResponseGenerator for orchestrated comment generation
+            response_data = self.response_generator.generate_response(
+                submission=submission,
+                variation_count=2,
+                verbose=False
+            )
+            comment_text = response_data["text"]
             
             # Post the comment using the standardized method
             comment = self.reply_to_submission(submission, comment_text)
@@ -216,8 +224,14 @@ class KarmaAgent:
             top_comments = eligible_comments[:min(3, len(eligible_comments))]
             selected_comment = random.choice(top_comments)
             
-            # Generate a reply using context-aware LLM handler
-            comment_text = generate_comment_from_submission(submission, self.reddit, comment_to_reply=selected_comment)
+            # Generate a reply using ResponseGenerator
+            response_data = self.response_generator.generate_response(
+                submission=submission,
+                comment_to_reply=selected_comment,
+                variation_count=2,
+                verbose=False
+            )
+            comment_text = response_data["text"]
             
             # Post the reply using the standardized method
             reply = self.reply_to_comment(selected_comment, comment_text)
