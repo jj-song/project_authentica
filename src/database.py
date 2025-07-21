@@ -121,6 +121,27 @@ def initialize_database() -> None:
         )
         ''')
         
+        # Create table for subreddit personalities if it doesn't exist
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS subreddit_personalities (
+            subreddit TEXT PRIMARY KEY,
+            tone TEXT NOT NULL,
+            formality_level REAL NOT NULL,
+            judgment_style TEXT NOT NULL,
+            empathy_level REAL NOT NULL,
+            directness_level REAL NOT NULL,
+            humor_usage REAL NOT NULL,
+            advice_approach TEXT NOT NULL,
+            questioning_pattern TEXT NOT NULL,
+            agreement_tendency REAL NOT NULL,
+            length_preference TEXT NOT NULL,
+            structure_preference TEXT NOT NULL,
+            raw_analysis TEXT NOT NULL,
+            updated_at REAL NOT NULL,
+            sample_count INTEGER NOT NULL
+        )
+        ''')
+        
         # Commit changes
         conn.commit()
         logger.info("Database tables created successfully")

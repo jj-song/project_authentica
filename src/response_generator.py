@@ -13,7 +13,7 @@ from src.context.collector import ContextCollector
 from src.thread_analysis.analyzer import ThreadAnalyzer
 from src.thread_analysis.strategies import ResponseStrategy
 from src.context.templates import TemplateSelector
-from src.utils.logging_utils import get_component_logger
+from src.utils.logging_utils import get_component_logger, log_llm_interaction, log_prompt_metrics
 from src.utils.error_utils import handle_exceptions
 
 
@@ -88,12 +88,6 @@ class ResponseGenerator:
             self.logger.info(f"Selected strategy: {response_strategy['type']}")
             self.logger.info(f"Strategy reasoning: {response_strategy['reasoning']}")
         
-        # Step 4: Select template
-        self.logger.info("Selecting template...")
-        template = self.template_selector.select_template(response_strategy, context)
-        if verbose:
-            self.logger.info(f"Selected template: {template.__class__.__name__}")
-        
         # If we have a target comment from the strategy and no explicit comment was provided
         target_comment = comment_to_reply
         if not target_comment and response_strategy.get('target_comment'):
@@ -119,6 +113,12 @@ class ResponseGenerator:
                 "context_analysis": comment_context
             }
         
+        # Step 4: Select template (after determining target comment)
+        self.logger.info("Selecting template...")
+        template = self.template_selector.select_template(context, target_comment)
+        if verbose:
+            self.logger.info(f"Selected template: {template.__class__.__name__}")
+        
         # Step 5: Generate response prompt
         self.logger.info("Generating response prompt...")
         prompt = self.template_selector.generate_with_variations(context, variation_count, target_comment)
@@ -127,8 +127,36 @@ class ResponseGenerator:
         self.logger.info("Calling LLM for final response generation...")
         from src.llm_handler import call_openai_api, clean_response
         
+        # Log prompt metrics
+        subreddit_name = submission.subreddit.display_name
+        strategy_name = getattr(response_strategy, 'strategy', getattr(response_strategy, 'type', str(response_strategy)))
+        template_name = template.__class__.__name__
+        
+        prompt_metrics = log_prompt_metrics(
+            prompt=prompt,
+            subreddit=subreddit_name,
+            strategy=strategy_name,
+            template=template_name,
+            logger=self.logger
+        )
+        
         raw_response = call_openai_api(prompt, verbose)
         response_text = clean_response(raw_response)
+        
+        # Log the complete LLM interaction
+        log_llm_interaction(
+            prompt=prompt,
+            response=response_text,
+            subreddit=subreddit_name,
+            strategy=strategy_name,
+            template=template_name,
+            metadata={
+                "submission_id": submission.id,
+                "comment_id": target_comment.id if target_comment else None,
+                "verbose": verbose,
+                **prompt_metrics
+            }
+        )
         
         # Create response data
         response_data = {

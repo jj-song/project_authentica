@@ -13,6 +13,7 @@ import praw
 from praw.models import Submission, Comment, Subreddit
 
 from src.humanization.sampler import CommentSampler
+from src.humanization.personality_analyzer import PersonalityAnalyzer
 from src.database import get_db_connection
 
 # Configure logging
@@ -46,9 +47,10 @@ class ContextCollector:
         self.comment_length_cache = {}  # Cache for comment length analysis
         self.representative_comments_cache = {}  # Cache for representative comments
         
-        # Initialize CommentSampler for humanization features
+        # Initialize CommentSampler and PersonalityAnalyzer for humanization features
         self.db_connection = get_db_connection()
         self.comment_sampler = CommentSampler(reddit_instance, self.db_connection)
+        self.personality_analyzer = PersonalityAnalyzer(self.db_connection)
     
     def collect_context(self, submission: Submission, max_comments: int = 10) -> Dict[str, Any]:
         """
@@ -85,6 +87,19 @@ class ContextCollector:
             )
         
         context["representative_comments"] = self.representative_comments_cache[subreddit_name]
+        
+        # Add personality analysis if representative comments are available
+        try:
+            if self.representative_comments_cache[subreddit_name]:
+                personality_data = self.personality_analyzer.analyze_subreddit_personality(
+                    subreddit_name, 
+                    self.representative_comments_cache[subreddit_name]
+                )
+                if personality_data:
+                    context["subreddit_personality"] = personality_data
+                    logger.info(f"Added personality analysis for r/{subreddit_name}")
+        except Exception as e:
+            logger.warning(f"Failed to analyze personality for r/{subreddit_name}: {e}")
         
         return context
     
@@ -231,11 +246,11 @@ class ContextCollector:
         
         if not comments:
             logger.info(f"No comments found in r/{subreddit_name}, using default values")
-            return {"min_length": 50, "avg_length": 500, "max_length": 800, "median_length": 400}
+            return {"min_length": 25, "avg_length": 500, "max_length": 800, "median_length": 400}
         
         # Calculate statistics
         avg_length = int(sum(comments) / len(comments))
-        min_length = max(50, min(comments))  # At least 50 characters min
+        min_length = max(25, min(comments))  # At least 25 characters min
         max_length = min(1000, max(800, max(comments)))  # At most 1000 characters max
         median_length = sorted(comments)[len(comments) // 2]
         

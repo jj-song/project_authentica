@@ -42,16 +42,22 @@ def enhance_prompt(base_prompt: str, samples: List[Dict[str, Any]], profile: Dic
         length_stats, informality_stats, structure_stats, context
     )
     
+    # Add personality-based guidance if available
+    personality_guidance = ""
+    if "subreddit_personality" in context:
+        personality_guidance = _generate_personality_guidance(context["subreddit_personality"])
+    
     # Combine everything into an enhanced prompt - prioritize examples
-    enhanced_prompt = f"""
-{base_prompt}
+    enhanced_prompt = f"""{base_prompt}
 
 STUDY THESE REAL EXAMPLES FROM THIS COMMUNITY FIRST:
 {sample_comments_text}
 
 {humanization_instructions}
 
-Remember to write as if you are a regular member of this community. Be direct and natural. Don't try to be perfect or overly agreeable. Express opinions honestly when appropriate.
+{personality_guidance}
+
+Write as a regular community member. Be direct and natural. Don't be perfect or overly agreeable.
 """
     
     return enhanced_prompt
@@ -74,7 +80,7 @@ def _extract_length_stats(profile: Dict[str, Any]) -> Dict[str, Any]:
             'word_mean': 40,
             'word_stdev': 10,
             'sentence_mean': 3,
-            'target_range': (150, 250)
+            'target_range': (50, 200)
         }
     
     length = profile['length']
@@ -86,7 +92,7 @@ def _extract_length_stats(profile: Dict[str, Any]) -> Dict[str, Any]:
     char_stdev = char_length.get('stdev', 50)
     
     # Calculate a reasonable target range (mean ± 0.5 stdev)
-    lower = max(50, int(char_mean - 0.5 * char_stdev))
+    lower = max(25, int(char_mean - 0.5 * char_stdev))
     upper = max(100, int(char_mean + 0.5 * char_stdev))
     
     return {
@@ -222,7 +228,8 @@ def _generate_humanization_instructions(
         "DO NOT use emojis in your response.",
         "Avoid overly perfect grammar and structure - real humans make small mistakes.",
         "DON'T be excessively agreeable or overly validating - it's okay to disagree or be neutral when warranted.",
-        "AVOID ending every response with a question just to drive engagement - only ask questions when genuinely relevant.",
+        "IMPORTANT: DO NOT ask questions to drive engagement - most real Reddit comments make a statement and move on.",
+        "AVOID multiple questions in one response - real users rarely ask 2+ questions in casual comments.",
         "DON'T sound like a therapist with excessive empathy statements or validation phrases."
     ]
     
@@ -233,31 +240,13 @@ def _generate_humanization_instructions(
     specific_text = " ".join(specific_guidance)
     
     instructions = f"""
-IMPORTANT HUMAN-LIKE WRITING GUIDELINES:
+WRITING GUIDELINES:
+- LENGTH: {lower}-{upper} characters typical for this subreddit
+- STYLE: {informality_text} {structure_text}
+- NATURAL IMPERFECTIONS: {imperfection_text}
+- AVOID: AI phrases, usernames, emojis, excessive politeness, perfect grammar
 
-1. LENGTH: Keep your {comment_type} between {lower}-{upper} characters. This is the typical length in this subreddit.
-
-2. STRUCTURE: {structure_text}
-
-3. STYLE: {informality_text}
-
-4. NATURAL IMPERFECTIONS: {imperfection_text}
-
-5. CRITICAL RULES:
-   {specific_text}
-
-6. AVOID:
-   - Overly formal or academic language
-   - Perfect, flawless writing
-   - Excessive politeness or hedging
-   - Starting with phrases like "As an AI" or "Here's my response"
-   - Bullet points or numbered lists (unless they appear in the examples)
-   - Excessive formatting
-   - Addressing users by their username
-   - Using emojis
-   - Being overly agreeable or validating
-   - Adding unnecessary questions at the end of responses
-   - Therapist-like tone with excessive empathy statements
+CRITICAL RULES: {specific_text}
 """
     
     return instructions
@@ -281,8 +270,8 @@ def _format_sample_comments(samples: List[Dict[str, Any]], context: Dict[str, An
     for i, sample in enumerate(samples, 1):
         # Truncate very long comments
         body = sample['body']
-        if len(body) > 500:
-            body = body[:497] + "..."
+        if len(body) > 300:
+            body = body[:297] + "..."
         
         # Don't include username in the example label to avoid encouraging username mentions
         formatted_samples.append(f"EXAMPLE {i} (Score: {sample['score']}):\n{body}")
@@ -290,22 +279,78 @@ def _format_sample_comments(samples: List[Dict[str, Any]], context: Dict[str, An
     examples_text = "\n\n".join(formatted_samples)
     
     # Add explicit instructions to study and mimic the examples
-    study_instructions = """
-IMPORTANT: Study these examples carefully. Notice:
-- Their length and structure
-- How they express ideas naturally
-- The casual imperfections in grammar and phrasing
-- The conversational tone and style
-- How they DON'T address users by username
-- How they DON'T use emojis
-- How they express opinions without being overly agreeable
-- How they don't always end with engagement questions
-- The natural, straightforward way they make points
-
-Your response should blend in with these examples as if written by the same community members.
-"""
+    study_instructions = "\nIMPORTANT: Study these examples. Notice their natural tone, length, casual imperfections, and straightforward style. Blend in naturally."
     
     return examples_text + "\n\n" + study_instructions
+
+
+def _generate_personality_guidance(personality_data: Dict[str, Any]) -> str:
+    """
+    Generate personality-based guidance for prompt enhancement.
+    
+    Args:
+        personality_data (Dict[str, Any]): Personality analysis data
+        
+    Returns:
+        str: Personality guidance text
+    """
+    if not personality_data:
+        return ""
+    
+    guidance_parts = []
+    
+    # Tone guidance
+    tone = personality_data.get('tone', 'mixed')
+    formality = personality_data.get('formality_level', 0.5)
+    
+    tone_instruction = f"COMMUNITY PERSONALITY: This community has a {tone} tone"
+    if formality < 0.3:
+        tone_instruction += " with very casual, informal communication"
+    elif formality < 0.7:
+        tone_instruction += " with moderately casual communication"
+    else:
+        tone_instruction += " with more polished, formal communication"
+    guidance_parts.append(tone_instruction + ".")
+    
+    # Empathy and judgment guidance
+    empathy = personality_data.get('empathy_level', 0.5)
+    judgment = personality_data.get('judgment_style', 'balanced')
+    
+    if empathy > 0.7:
+        guidance_parts.append("Show high empathy and emotional understanding in your response.")
+    elif empathy < 0.3:
+        guidance_parts.append("Focus on practical solutions rather than emotional support.")
+    
+    if judgment == 'harsh':
+        guidance_parts.append("This community tends to give direct, critical feedback when warranted.")
+    elif judgment == 'lenient':
+        guidance_parts.append("This community tends to be understanding and give people the benefit of the doubt.")
+    
+    # Directness guidance
+    directness = personality_data.get('directness_level', 0.5)
+    if directness > 0.7:
+        guidance_parts.append("Be direct and straightforward in your communication.")
+    elif directness < 0.3:
+        guidance_parts.append("Use a more tactful, indirect approach when addressing sensitive topics.")
+    
+    # Humor guidance
+    humor = personality_data.get('humor_usage', 0.3)
+    if humor > 0.6:
+        guidance_parts.append("Light humor is common and acceptable when it fits naturally.")
+    elif humor < 0.2:
+        guidance_parts.append("Keep humor minimal and focus on substantive content.")
+    
+    # Agreement tendency
+    agreement = personality_data.get('agreement_tendency', 0.5)
+    if agreement < 0.3:
+        guidance_parts.append("Don't hesitate to respectfully disagree when you have a different perspective.")
+    elif agreement > 0.7:
+        guidance_parts.append("This community tends to be supportive and agreeable in discussions.")
+    
+    if guidance_parts:
+        return "COMMUNITY STYLE: " + " ".join(guidance_parts)
+    
+    return ""
 
 
 if __name__ == "__main__":
