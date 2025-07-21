@@ -43,14 +43,14 @@ class ResponseStrategy:
     def __init__(self):
         """Initialize the ResponseStrategy generator."""
         self.strategy_weights = {
-            StrategyType.DIRECT_REPLY: 0.1,
-            StrategyType.POPULAR_COMMENT: 0.3,
-            StrategyType.CONVERSATION_JOINER: 0.2,
-            StrategyType.HOTSPOT_ENGAGEMENT: 0.2,
-            StrategyType.INFORMATION_PROVIDER: 0.05,
-            StrategyType.QUESTION_ANSWERER: 0.05,
-            StrategyType.OPINION_SHARER: 0.05,
-            StrategyType.CHAIN_EXTENDER: 0.05,
+            StrategyType.DIRECT_REPLY: 0.4,
+            StrategyType.POPULAR_COMMENT: 0.2,
+            StrategyType.CONVERSATION_JOINER: 0.15,
+            StrategyType.HOTSPOT_ENGAGEMENT: 0.15,
+            StrategyType.INFORMATION_PROVIDER: 0.025,
+            StrategyType.QUESTION_ANSWERER: 0.025,
+            StrategyType.OPINION_SHARER: 0.025,
+            StrategyType.CHAIN_EXTENDER: 0.025,
         }
     
     def determine_strategy(self, thread_analysis: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -106,17 +106,17 @@ class ResponseStrategy:
         # If there are hotspots, increase hotspot engagement weight
         if thread_analysis.get("discussion_hotspots", []):
             weights[StrategyType.HOTSPOT_ENGAGEMENT] += 0.1
-            weights[StrategyType.DIRECT_REPLY] -= 0.05
+            weights[StrategyType.DIRECT_REPLY] -= 0.02
         
         # If there are long chains, increase chain extender weight
         if thread_analysis.get("max_chain_length", 0) > 3:
             weights[StrategyType.CHAIN_EXTENDER] += 0.1
-            weights[StrategyType.DIRECT_REPLY] -= 0.05
+            weights[StrategyType.DIRECT_REPLY] -= 0.02
         
         # If there are many back-and-forth conversations, increase conversation joiner weight
         if thread_analysis.get("reply_patterns", {}).get("back_and_forth", 0) > 2:
             weights[StrategyType.CONVERSATION_JOINER] += 0.1
-            weights[StrategyType.DIRECT_REPLY] -= 0.05
+            weights[StrategyType.DIRECT_REPLY] -= 0.02
         
         # If the submission is a question, increase question answerer weight
         submission = context.get("submission", {})

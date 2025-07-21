@@ -246,11 +246,11 @@ class ContextCollector:
         
         if not comments:
             logger.info(f"No comments found in r/{subreddit_name}, using default values")
-            return {"min_length": 50, "avg_length": 500, "max_length": 800, "median_length": 400}
+            return {"min_length": 25, "avg_length": 500, "max_length": 800, "median_length": 400}
         
         # Calculate statistics
         avg_length = int(sum(comments) / len(comments))
-        min_length = max(50, min(comments))  # At least 50 characters min
+        min_length = max(25, min(comments))  # At least 25 characters min
         max_length = min(1000, max(800, max(comments)))  # At most 1000 characters max
         median_length = sorted(comments)[len(comments) // 2]
         

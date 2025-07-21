@@ -88,12 +88,6 @@ class ResponseGenerator:
             self.logger.info(f"Selected strategy: {response_strategy['type']}")
             self.logger.info(f"Strategy reasoning: {response_strategy['reasoning']}")
         
-        # Step 4: Select template
-        self.logger.info("Selecting template...")
-        template = self.template_selector.select_template(response_strategy, context)
-        if verbose:
-            self.logger.info(f"Selected template: {template.__class__.__name__}")
-        
         # If we have a target comment from the strategy and no explicit comment was provided
         target_comment = comment_to_reply
         if not target_comment and response_strategy.get('target_comment'):
@@ -118,6 +112,12 @@ class ResponseGenerator:
                 "is_op": target_comment.is_submitter,
                 "context_analysis": comment_context
             }
+        
+        # Step 4: Select template (after determining target comment)
+        self.logger.info("Selecting template...")
+        template = self.template_selector.select_template(context, target_comment)
+        if verbose:
+            self.logger.info(f"Selected template: {template.__class__.__name__}")
         
         # Step 5: Generate response prompt
         self.logger.info("Generating response prompt...")

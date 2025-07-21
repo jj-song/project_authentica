@@ -48,8 +48,7 @@ def enhance_prompt(base_prompt: str, samples: List[Dict[str, Any]], profile: Dic
         personality_guidance = _generate_personality_guidance(context["subreddit_personality"])
     
     # Combine everything into an enhanced prompt - prioritize examples
-    enhanced_prompt = f"""
-{base_prompt}
+    enhanced_prompt = f"""{base_prompt}
 
 STUDY THESE REAL EXAMPLES FROM THIS COMMUNITY FIRST:
 {sample_comments_text}
@@ -58,7 +57,7 @@ STUDY THESE REAL EXAMPLES FROM THIS COMMUNITY FIRST:
 
 {personality_guidance}
 
-Remember to write as if you are a regular member of this community. Be direct and natural. Don't try to be perfect or overly agreeable. Express opinions honestly when appropriate.
+Write as a regular community member. Be direct and natural. Don't be perfect or overly agreeable.
 """
     
     return enhanced_prompt
@@ -81,7 +80,7 @@ def _extract_length_stats(profile: Dict[str, Any]) -> Dict[str, Any]:
             'word_mean': 40,
             'word_stdev': 10,
             'sentence_mean': 3,
-            'target_range': (150, 250)
+            'target_range': (50, 200)
         }
     
     length = profile['length']
@@ -93,7 +92,7 @@ def _extract_length_stats(profile: Dict[str, Any]) -> Dict[str, Any]:
     char_stdev = char_length.get('stdev', 50)
     
     # Calculate a reasonable target range (mean ± 0.5 stdev)
-    lower = max(50, int(char_mean - 0.5 * char_stdev))
+    lower = max(25, int(char_mean - 0.5 * char_stdev))
     upper = max(100, int(char_mean + 0.5 * char_stdev))
     
     return {
@@ -229,7 +228,8 @@ def _generate_humanization_instructions(
         "DO NOT use emojis in your response.",
         "Avoid overly perfect grammar and structure - real humans make small mistakes.",
         "DON'T be excessively agreeable or overly validating - it's okay to disagree or be neutral when warranted.",
-        "AVOID ending every response with a question just to drive engagement - only ask questions when genuinely relevant.",
+        "IMPORTANT: DO NOT ask questions to drive engagement - most real Reddit comments make a statement and move on.",
+        "AVOID multiple questions in one response - real users rarely ask 2+ questions in casual comments.",
         "DON'T sound like a therapist with excessive empathy statements or validation phrases."
     ]
     
@@ -245,6 +245,8 @@ WRITING GUIDELINES:
 - STYLE: {informality_text} {structure_text}
 - NATURAL IMPERFECTIONS: {imperfection_text}
 - AVOID: AI phrases, usernames, emojis, excessive politeness, perfect grammar
+
+CRITICAL RULES: {specific_text}
 """
     
     return instructions
@@ -277,9 +279,7 @@ def _format_sample_comments(samples: List[Dict[str, Any]], context: Dict[str, An
     examples_text = "\n\n".join(formatted_samples)
     
     # Add explicit instructions to study and mimic the examples
-    study_instructions = """
-IMPORTANT: Study these examples. Notice their natural tone, length, casual imperfections, and straightforward style. Your response should blend in as if written by the same community members.
-"""
+    study_instructions = "\nIMPORTANT: Study these examples. Notice their natural tone, length, casual imperfections, and straightforward style. Blend in naturally."
     
     return examples_text + "\n\n" + study_instructions
 
